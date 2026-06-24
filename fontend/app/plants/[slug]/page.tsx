@@ -237,6 +237,19 @@ export default function PlantDetailPage() {
     }, 900);
   };
 
+  const buyNow = () => {
+    const params = new URLSearchParams({
+      buyNow: "true",
+      name: "Red Anthurium Plant",
+      price: String(price),
+      qty: String(qty),
+      size: SIZES[selectedSize].label,
+      pot: pot.name,
+      img: IMAGES[0].src
+    });
+    window.location.href = `/checkout?${params.toString()}`;
+  };
+
   const price   = SIZES[selectedSize].price;
   const pot     = POTS[selectedPot];
   const imgSrc  = IMAGES[activeImg].src;
@@ -524,6 +537,29 @@ export default function PlantDetailPage() {
                   {cartState === "success" ? "Added to Cart ✓" : cartState === "loading" ? "Adding…" : <><CartIco /> Add to Cart</>}
                 </button>
               </div>
+
+              {/* Buy Now Button */}
+              <button id="buy-now-btn"
+                onClick={buyNow}
+                style={{
+                  width: "100%", height: "52px", borderRadius: T.pill, border: "none",
+                  background: T.green, color: T.white, fontFamily: "Outfit, sans-serif",
+                  fontWeight: 600, fontSize: "16px", cursor: "pointer",
+                  display: "flex", alignItems: "center", justifyContent: "center", gap: "8px",
+                  transition: `background ${T.instant}, transform ${T.instant}`,
+                  boxShadow: "0 4px 14px rgba(0, 181, 102, 0.25)",
+                  marginBottom: "16px",
+                  outline: "none",
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.background = T.greenDk)}
+                onMouseLeave={(e) => (e.currentTarget.style.background = T.green)}
+                onMouseDown={(e) => ((e.currentTarget as HTMLButtonElement).style.transform = "scale(0.98)")}
+                onMouseUp={(e) => ((e.currentTarget as HTMLButtonElement).style.transform = "scale(1)")}
+                onFocus={(e) => (e.currentTarget.style.outline = `2px solid ${T.text}`)}
+                onBlur={(e) => (e.currentTarget.style.outline = "none")}
+              >
+                💳 Buy It Now
+              </button>
 
               {/* Below CTA */}
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "8px" }}>

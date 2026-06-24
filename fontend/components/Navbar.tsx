@@ -51,7 +51,7 @@ const NAV_LINKS = [
   { label: "Plants",   href: "/plants/monstera", dropdown: ["Indoor Plants", "Flower Plants", "Succulents", "Balcony Decor"] },
   { label: "Products", href: "#",        dropdown: ["Seeds", "Soil & Compost", "Tools", "Fertilizer"] },
   { label: "🤖 AI Care", href: "/ai-care" },
-  { label: "About",    href: "#" },
+  { label: "Our Service",    href: "#" },
 ];
 
 interface SharedNavbarProps {
@@ -203,7 +203,14 @@ export default function SharedNavbar({ cartCount = 0 }: SharedNavbarProps) {
               <div style={{ background: "white", border: "1px solid rgba(0,181,102,0.4)", borderRadius: "9999px", padding: "6px 14px", boxShadow: "0 4px 16px rgba(0,181,102,0.12)", display: "flex", alignItems: "center", gap: "8px" }}>
                 <SearchIcon />
                 <input ref={searchRef} value={searchValue} onChange={(e) => setSearchValue(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === "Escape") { setSearchOpen(false); setSearchValue(""); } }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Escape") {
+                      setSearchOpen(false);
+                      setSearchValue("");
+                    } else if (e.key === "Enter" && searchValue.trim()) {
+                      window.location.href = `/search?q=${encodeURIComponent(searchValue.trim())}`;
+                    }
+                  }}
                   placeholder="Search plants, seeds..." aria-label="Search"
                   style={{ width: "180px", border: "none", outline: "none", fontFamily: "Outfit, sans-serif", fontSize: "14px", color: "#1c1c1c", background: "transparent" }}
                 />
@@ -218,17 +225,17 @@ export default function SharedNavbar({ cartCount = 0 }: SharedNavbarProps) {
           </div>
 
           {/* User */}
-          <button aria-label="Account"
+          <Link href="/profile" aria-label="Account"
             style={{ width: "38px", height: "38px", borderRadius: "50px", border: "none", background: "transparent", cursor: "pointer", color: "#1c1c1c", display: "flex", alignItems: "center", justifyContent: "center", transition: "background 200ms" }}
-            onMouseEnter={(e) => ((e.currentTarget as HTMLButtonElement).style.background = "rgba(0,181,102,0.08)")}
-            onMouseLeave={(e) => ((e.currentTarget as HTMLButtonElement).style.background = "transparent")}
-          ><UserIcon /></button>
+            onMouseEnter={(e) => ((e.currentTarget as HTMLAnchorElement).style.background = "rgba(0,181,102,0.08)")}
+            onMouseLeave={(e) => ((e.currentTarget as HTMLAnchorElement).style.background = "transparent")}
+          ><UserIcon /></Link>
 
           {/* Cart */}
-          <button aria-label={`Cart, ${cartCount} item${cartCount !== 1 ? "s" : ""}`}
+          <Link href="/cart" aria-label={`Cart, ${cartCount} item${cartCount !== 1 ? "s" : ""}`}
             style={{ position: "relative", width: "38px", height: "38px", borderRadius: "50px", border: "none", background: "transparent", cursor: "pointer", color: "#1c1c1c", display: "flex", alignItems: "center", justifyContent: "center", transition: "background 200ms" }}
-            onMouseEnter={(e) => ((e.currentTarget as HTMLButtonElement).style.background = "rgba(0,181,102,0.08)")}
-            onMouseLeave={(e) => ((e.currentTarget as HTMLButtonElement).style.background = "transparent")}
+            onMouseEnter={(e) => ((e.currentTarget as HTMLAnchorElement).style.background = "rgba(0,181,102,0.08)")}
+            onMouseLeave={(e) => ((e.currentTarget as HTMLAnchorElement).style.background = "transparent")}
           >
             <CartIcon />
             {cartCount > 0 && (
@@ -236,7 +243,7 @@ export default function SharedNavbar({ cartCount = 0 }: SharedNavbarProps) {
                 {cartCount > 9 ? "9+" : cartCount}
               </span>
             )}
-          </button>
+          </Link>
 
           {/* Hamburger */}
           <button className="snav-hamburger" onClick={() => setMenuOpen(v => !v)} aria-label="Open menu"
