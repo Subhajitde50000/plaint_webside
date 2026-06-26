@@ -432,6 +432,30 @@ function SearchResultsContent() {
           text-align: center;
           margin-bottom: 40px;
         }
+
+        @media (max-width: 600px) {
+          .search-page-container {
+            padding: 24px 16px !important;
+          }
+          .search-form-bar {
+            margin-bottom: 24px !important;
+          }
+        }
+        @media (max-width: 480px) {
+          .search-form-bar {
+            gap: 8px !important;
+          }
+          .search-bar-input {
+            font-size: 14px !important;
+            padding: 0 12px !important;
+            height: 44px !important;
+          }
+          .search-form-bar button {
+            padding: 0 16px !important;
+            font-size: 13px !important;
+            height: 44px !important;
+          }
+        }
       `}</style>
 
       {/* Shared Global Header */}
@@ -444,6 +468,12 @@ function SearchResultsContent() {
           value={searchInput} 
           onChange={e => setSearchInput(e.target.value)} 
           placeholder="Search plants, seeds, care tools..."
+          onFocus={(e) => {
+            if (typeof window !== "undefined" && window.innerWidth <= 768) {
+              e.target.blur();
+              window.dispatchEvent(new CustomEvent("open-mobile-search"));
+            }
+          }}
         />
         <button type="submit" className="green-btn" style={{ height: "50px", padding: "0 24px", borderRadius: "12px" }}>
           🔍 Search

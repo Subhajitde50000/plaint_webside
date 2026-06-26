@@ -392,30 +392,65 @@ export default function AiCarePage() {
   const selPlant = canvasPlants.find(p => p.id === selectedPlant);
 
   // Drag on canvas
-  const onMouseDown = (e: React.MouseEvent, id: string) => {
-    e.preventDefault();
+  const handleDragStart = (id: string, clientX: number, clientY: number) => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const rect = canvas.getBoundingClientRect();
     const plant = canvasPlants.find(p => p.id === id)!;
-    dragging.current = { id, ox: e.clientX - (plant.x / 100) * rect.width, oy: e.clientY - (plant.y / 100) * rect.height };
+    dragging.current = { id, ox: clientX - (plant.x / 100) * rect.width, oy: clientY - (plant.y / 100) * rect.height };
     setSelectedPlant(id);
   };
-  const onMouseMove = useCallback((e: MouseEvent) => {
+
+  const onMouseDown = (e: React.MouseEvent, id: string) => {
+    e.preventDefault();
+    handleDragStart(id, e.clientX, e.clientY);
+  };
+
+  const onTouchStart = (e: React.TouchEvent, id: string) => {
+    e.stopPropagation();
+    if (e.touches[0]) {
+      handleDragStart(id, e.touches[0].clientX, e.touches[0].clientY);
+    }
+  };
+
+  const handleDragMove = useCallback((clientX: number, clientY: number) => {
     if (!dragging.current) return;
     const canvas = canvasRef.current;
     if (!canvas) return;
     const rect = canvas.getBoundingClientRect();
-    const x = Math.min(90, Math.max(5, ((e.clientX - dragging.current.ox) / rect.width) * 100));
-    const y = Math.min(85, Math.max(5, ((e.clientY - dragging.current.oy) / rect.height) * 100));
+    const x = Math.min(90, Math.max(5, ((clientX - dragging.current.ox) / rect.width) * 100));
+    const y = Math.min(85, Math.max(5, ((clientY - dragging.current.oy) / rect.height) * 100));
     setCanvasPlants(prev => prev.map(p => p.id === dragging.current!.id ? { ...p, x, y } : p));
   }, []);
-  const onMouseUp = useCallback(() => { dragging.current = null; }, []);
+
+  const onMouseMove = useCallback((e: MouseEvent) => {
+    handleDragMove(e.clientX, e.clientY);
+  }, [handleDragMove]);
+
+  const onTouchMove = useCallback((e: TouchEvent) => {
+    if (!dragging.current) return;
+    if (e.cancelable) e.preventDefault();
+    if (e.touches[0]) {
+      handleDragMove(e.touches[0].clientX, e.touches[0].clientY);
+    }
+  }, [handleDragMove]);
+
+  const onDragEnd = useCallback(() => {
+    dragging.current = null;
+  }, []);
+
   useEffect(() => {
     window.addEventListener("mousemove", onMouseMove);
-    window.addEventListener("mouseup", onMouseUp);
-    return () => { window.removeEventListener("mousemove", onMouseMove); window.removeEventListener("mouseup", onMouseUp); };
-  }, [onMouseMove, onMouseUp]);
+    window.addEventListener("mouseup", onDragEnd);
+    window.addEventListener("touchmove", onTouchMove, { passive: false });
+    window.addEventListener("touchend", onDragEnd);
+    return () => {
+      window.removeEventListener("mousemove", onMouseMove);
+      window.removeEventListener("mouseup", onDragEnd);
+      window.removeEventListener("touchmove", onTouchMove);
+      window.removeEventListener("touchend", onDragEnd);
+    };
+  }, [onMouseMove, onTouchMove, onDragEnd]);
 
   const handleFileUpload = (file: File) => {
     if (file.size > 10 * 1024 * 1024) { setToast("That file is over 10MB. Try a smaller photo."); return; }
@@ -443,8 +478,12 @@ export default function AiCarePage() {
         @keyframes sway { 0%,100%{transform:rotate(-4deg)} 50%{transform:rotate(4deg)} }
         @keyframes fabPulse { 0%,100%{box-shadow:0 0 0 0 rgba(0,181,102,0.4)} 50%{box-shadow:0 0 0 10px rgba(0,181,102,0)} }
         .two-panel { display: grid; grid-template-columns: 44% 56%; gap: 24px; }
+        .ac-canvas { height: 520px; }
         @media (max-width: 1023px) { .two-panel { grid-template-columns: 1fr !important; } }
-        @media (max-width: 767px) { .ac-wrap { padding: 0 16px !important; } }
+        @media (max-width: 767px) {
+          .ac-wrap { padding: 0 16px !important; }
+          .ac-canvas { height: 380px !important; }
+        }
       `}</style>
 
       <Navbar cartCount={cartCount} />
@@ -796,7 +835,8 @@ export default function AiCarePage() {
               <div ref={canvasRef}
                 role="application" aria-label="Plant visualiser canvas"
                 onClick={(e) => { if (e.target === canvasRef.current) setSelectedPlant(null); }}
-                style={{ position: "relative", height: "520px", background: roomPhoto ? "transparent" : "rgba(28,28,28,0.04)", borderRadius: "0 0 24px 24px", overflow: "hidden", boxShadow: S2, cursor: "default", backgroundImage: roomPhoto ? "none" : "radial-gradient(rgba(28,28,28,0.08) 1px, transparent 1px)", backgroundSize: "20px 20px" }}>
+                className="ac-canvas"
+                style={{ position: "relative", background: roomPhoto ? "transparent" : "rgba(28,28,28,0.04)", borderRadius: "0 0 24px 24px", overflow: "hidden", boxShadow: S2, cursor: "default", backgroundImage: roomPhoto ? "none" : "radial-gradient(rgba(28,28,28,0.08) 1px, transparent 1px)", backgroundSize: "20px 20px" }}>
 
                 {roomPhoto && <img src={roomPhoto} alt="Room" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} />}
 
@@ -820,6 +860,7 @@ export default function AiCarePage() {
                   return (
                     <div key={cp.id}
                       onMouseDown={(e) => onMouseDown(e, cp.id)}
+                      onTouchStart={(e) => onTouchStart(e, cp.id)}
                       style={{
                         position: "absolute",
                         left: `${cp.x}%`, top: `${cp.y}%`,

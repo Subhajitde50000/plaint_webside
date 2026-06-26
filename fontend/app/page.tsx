@@ -237,11 +237,11 @@ function HeroSection() {
         <div key={i} style={{ position: "absolute", ...pos as React.CSSProperties, width: "12px", height: "18px", background: "#C4A882", borderRadius: "50% 50% 50% 50% / 60% 60% 40% 40%", opacity: 0.22, animation: `float ${4 + i}s ease-in-out infinite ${i * 0.5}s` }} />
       ))}
 
-      <div className="container" style={{ width: "100%", padding: "80px 48px" }}>
+      <div className="container hero-container" style={{ width: "100%" }}>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "48px", alignItems: "center", minHeight: "78vh" }} className="hero-grid">
 
           {/* ── LEFT: Text (fades up on slide change) ── */}
-          <div style={{
+          <div className="hero-text-col" style={{
             position: "relative",
             zIndex: 2,
             opacity: textVisible ? 1 : 0,
@@ -249,23 +249,23 @@ function HeroSection() {
             transition: "opacity 0.3s ease, transform 0.3s ease",
           }}>
             {/* Sparkle stars */}
-            <span style={{ position: "absolute", top: "-20px", left: "10px", fontSize: "22px", color: "var(--color-accent-yellow)", animation: "pulse-star 2s ease-in-out infinite" }}>✦</span>
-            <span style={{ position: "absolute", top: "40px", right: "60px", fontSize: "14px", color: "var(--color-accent-yellow)", animation: "pulse-star 2.5s ease-in-out infinite 0.5s" }}>✦</span>
-            <span style={{ position: "absolute", bottom: "60px", left: "30px", fontSize: "18px", color: "var(--color-accent-yellow)", animation: "pulse-star 3s ease-in-out infinite 1s" }}>✦</span>
+            <span style={{ position: "absolute", top: "-20px", left: "10px", fontSize: "22px", color: "var(--color-accent-yellow)", animation: "pulse-star 2s ease-in-out infinite" }} className="hero-leaf-accent">✦</span>
+            <span style={{ position: "absolute", top: "40px", right: "60px", fontSize: "14px", color: "var(--color-accent-yellow)", animation: "pulse-star 2.5s ease-in-out infinite 0.5s" }} className="hero-leaf-accent">✦</span>
+            <span style={{ position: "absolute", bottom: "60px", left: "30px", fontSize: "18px", color: "var(--color-accent-yellow)", animation: "pulse-star 3s ease-in-out infinite 1s" }} className="hero-leaf-accent">✦</span>
 
-            <div style={{ marginBottom: "20px" }}>
+            <div style={{ marginBottom: "20px" }} className="hero-badge-wrap">
               <span className="badge-pill">🌿 Premium Plant Shop</span>
             </div>
 
-            <h1 style={{ fontFamily: "'Playfair Display', serif", fontWeight: 800, fontSize: "clamp(38px, 5vw, 64px)", color: "var(--color-green-dark)", lineHeight: 1.1, marginBottom: "20px", letterSpacing: "-0.5px" }}>
+            <h1 className="hero-title" style={{ fontFamily: "'Playfair Display', serif", fontWeight: 800, fontSize: "clamp(38px, 5vw, 64px)", color: "var(--color-green-dark)", lineHeight: 1.1, marginBottom: "20px", letterSpacing: "-0.5px" }}>
               {slide.heading}
             </h1>
 
-            <p style={{ fontFamily: "'DM Sans', sans-serif", fontSize: "17px", color: "var(--color-text-secondary)", lineHeight: 1.7, marginBottom: "36px", maxWidth: "480px" }}>
+            <p className="hero-desc" style={{ fontFamily: "'DM Sans', sans-serif", fontSize: "17px", color: "var(--color-text-secondary)", lineHeight: 1.7, marginBottom: "36px", maxWidth: "480px" }}>
               {slide.sub}
             </p>
 
-            <div style={{ display: "flex", gap: "16px", flexWrap: "wrap" }}>
+            <div className="hero-btns-wrap" style={{ display: "flex", gap: "16px", flexWrap: "wrap" }}>
               <Link href={slide.heading === "AI Smart Care" ? "/ai-care" : "/plants/monstera"} style={{ textDecoration: "none" }}>
                 <button id="hero-shop-btn" className="btn-primary">{slide.cta} <ArrowRight /></button>
               </Link>
@@ -273,7 +273,7 @@ function HeroSection() {
             </div>
 
             {/* Stats */}
-            <div style={{ display: "flex", gap: "32px", marginTop: "48px", flexWrap: "wrap" }}>
+            <div className="hero-stats" style={{ display: "flex", gap: "32px", marginTop: "48px", flexWrap: "wrap" }}>
               {[{ val: "500+", label: "Plant Varieties" }, { val: "10K+", label: "Happy Gardeners" }, { val: "4.9★", label: "Customer Rating" }].map((stat) => (
                 <div key={stat.label}>
                   <div style={{ fontFamily: "Poppins", fontWeight: 700, fontSize: "24px", color: "var(--color-green-dark)" }}>{stat.val}</div>
@@ -284,12 +284,10 @@ function HeroSection() {
           </div>
 
           {/* ── RIGHT: Visual (crossfade on slide change) ── */}
-          <div style={{ position: "relative", display: "flex", justifyContent: "center", alignItems: "center", minHeight: "480px" }}>
+          <div className="hero-visual-col" style={{ position: "relative", display: "flex", justifyContent: "center", alignItems: "center" }}>
             {/* Blob (transitions with slide color) */}
-            <div style={{
+            <div className="hero-blob" style={{
               position: "absolute",
-              width: "500px",
-              height: "500px",
               background: slide.blobColor,
               borderRadius: "50%",
               zIndex: 0,
@@ -304,7 +302,7 @@ function HeroSection() {
             )}
 
             {/* Current image fading IN */}
-            <div style={{
+            <div className="hero-main-img-wrap" style={{
               position: "relative",
               zIndex: 3,
               opacity: imgFading ? 0 : 1,
@@ -326,25 +324,25 @@ function HeroSection() {
 
             {/* Watering can (only slide 0) */}
             {slide.showWateringCan && (
-              <div style={{ position: "absolute", bottom: "5%", left: "-5%", zIndex: 4, animation: "sway 3s ease-in-out infinite", transformOrigin: "bottom center" }}>
+              <div className="hero-watering-can" style={{ position: "absolute", bottom: "5%", left: "-5%", zIndex: 4, animation: "sway 3s ease-in-out infinite", transformOrigin: "bottom center" }}>
                 <Image src="/watering-can.png" alt="Cute watering can character" width={140} height={140} sizes="140px" style={{ objectFit: "contain" }} />
               </div>
             )}
 
             {/* Water droplets (only slide 0) */}
             {slide.showDroplets && [0, 0.3, 0.6].map((delay, i) => (
-              <div key={i} style={{ position: "absolute", left: `${5 + i * 5}%`, bottom: `${10 + i * 8}%`, animation: `drip 1.5s ease-in infinite ${delay}s`, zIndex: 5 }}>
+              <div key={i} className="hero-droplet" style={{ position: "absolute", left: `${5 + i * 5}%`, bottom: `${10 + i * 8}%`, animation: `drip 1.5s ease-in infinite ${delay}s`, zIndex: 5 }}>
                 <WaterDroplet size={12 + i * 4} color="#6BBDE3" />
               </div>
             ))}
 
             {/* Floating leaf accents */}
-            <div style={{ position: "absolute", top: "5%", right: "5%", animation: "floatLeaf 4s ease-in-out infinite 1s" }}><LeafShape color="#4A7C40" width={30} height={40} rotate={25} opacity={0.7} /></div>
-            <div style={{ position: "absolute", top: "35%", right: "-2%", animation: "floatLeaf 5s ease-in-out infinite" }}><LeafShape color="#A8C5A0" width={22} height={30} rotate={-10} opacity={0.6} /></div>
-            <div style={{ position: "absolute", bottom: "30%", right: "8%", animation: "floatLeaf 3.5s ease-in-out infinite 2s" }}><LeafShape color="#2D5A27" width={18} height={25} rotate={40} opacity={0.5} /></div>
+            <div className="hero-leaf-accent" style={{ position: "absolute", top: "5%", right: "5%", animation: "floatLeaf 4s ease-in-out infinite 1s" }}><LeafShape color="#4A7C40" width={30} height={40} rotate={25} opacity={0.7} /></div>
+            <div className="hero-leaf-accent" style={{ position: "absolute", top: "35%", right: "-2%", animation: "floatLeaf 5s ease-in-out infinite" }}><LeafShape color="#A8C5A0" width={22} height={30} rotate={-10} opacity={0.6} /></div>
+            <div className="hero-leaf-accent" style={{ position: "absolute", bottom: "30%", right: "8%", animation: "floatLeaf 3.5s ease-in-out infinite 2s" }}><LeafShape color="#2D5A27" width={18} height={25} rotate={40} opacity={0.5} /></div>
 
             {/* Yellow sparkle */}
-            <span style={{ position: "absolute", top: "12%", left: "15%", fontSize: "28px", color: "var(--color-accent-yellow)", animation: "pulse-star 2s ease-in-out infinite", zIndex: 5 }}>✦</span>
+            <span style={{ position: "absolute", top: "12%", left: "15%", fontSize: "28px", color: "var(--color-accent-yellow)", animation: "pulse-star 2s ease-in-out infinite", zIndex: 5 }} className="hero-leaf-accent">✦</span>
           </div>
         </div>
 
@@ -372,9 +370,64 @@ function HeroSection() {
       </div>
 
       <style>{`
+        .hero-container {
+          padding: 80px 48px;
+        }
+        .hero-blob {
+          width: 500px;
+          height: 500px;
+        }
+        .hero-visual-col {
+          min-height: 480px;
+        }
         @media (max-width: 768px) {
           .hero-grid { grid-template-columns: 1fr !important; text-align: center; }
-          .hero-grid > div:last-child { display: none; }
+          .hero-container {
+            padding: 40px 16px !important;
+          }
+          .hero-desc {
+            margin: 0 auto 28px !important;
+          }
+          .hero-badge-wrap {
+            display: flex;
+            justify-content: center;
+          }
+          .hero-btns-wrap {
+            justify-content: center !important;
+          }
+          .hero-stats {
+            justify-content: center !important;
+            gap: 16px !important;
+            margin-top: 32px !important;
+          }
+          .hero-visual-col {
+            min-height: 320px !important;
+            margin-top: 24px;
+          }
+          .hero-blob {
+            width: 280px !important;
+            height: 280px !important;
+          }
+          .hero-main-img-wrap img {
+            max-height: 280px !important;
+            max-width: 240px !important;
+          }
+          .hero-watering-can {
+            width: 90px !important;
+            height: 90px !important;
+            left: 5% !important;
+            bottom: 5% !important;
+          }
+          .hero-watering-can img {
+            width: 90px !important;
+            height: 90px !important;
+          }
+          .hero-droplet {
+            display: none !important;
+          }
+          .hero-leaf-accent {
+            display: none !important;
+          }
         }
       `}</style>
     </section>
@@ -657,7 +710,7 @@ function ProductsSection() {
             <p style={{ fontFamily: "DM Sans", fontSize: "16px", color: "var(--color-text-secondary)", lineHeight: 1.7, marginBottom: "32px", maxWidth: "360px" }}>
               From rare seeds to premium soils and expert-tested plant nutrients — your one-stop plant supply shop.
             </p>
-            <div style={{ display: "flex", background: "white", borderRadius: "var(--radius-full)", padding: "6px 6px 6px 20px", boxShadow: "var(--shadow-card)", gap: "8px", alignItems: "center", maxWidth: "420px" }}>
+            <div style={{ display: "flex", background: "white", borderRadius: "var(--radius-full)", padding: "6px 6px 6px 20px", boxShadow: "var(--shadow-card)", gap: "8px", alignItems: "center", maxWidth: "420px" }} className="products-search-wrap">
               <SearchIcon />
               <input id="search-order-input" type="text" placeholder="Search products…" value={query} onChange={(e) => setQuery(e.target.value)}
                 style={{ flex: 1, border: "none", outline: "none", fontFamily: "DM Sans", fontSize: "15px", color: "var(--color-text-primary)", background: "transparent" }}
@@ -668,9 +721,10 @@ function ProductsSection() {
           </div>
 
           {/* Right — Product Grid */}
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px" }} className="products-right-grid">
             {products.map((product) => (
-              <div key={product.id} id={`product-${product.id}`}
+              <Link key={product.id} href={`/products/${product.id}`} style={{ textDecoration: "none" }}>
+              <div id={`product-${product.id}`}
                 style={{ background: "white", borderRadius: "var(--radius-lg)", boxShadow: "var(--shadow-card)", overflow: "hidden", cursor: "pointer", transition: "transform 0.25s ease, box-shadow 0.25s ease", position: "relative" }}
                 onMouseEnter={(e) => { (e.currentTarget as HTMLDivElement).style.transform = "scale(1.03) translateY(-4px)"; (e.currentTarget as HTMLDivElement).style.boxShadow = "0 12px 40px rgba(45,90,39,0.15)"; }}
                 onMouseLeave={(e) => { (e.currentTarget as HTMLDivElement).style.transform = "scale(1)"; (e.currentTarget as HTMLDivElement).style.boxShadow = "var(--shadow-card)"; }}
@@ -683,15 +737,34 @@ function ProductsSection() {
                   <h4 style={{ fontFamily: "Poppins", fontWeight: 600, fontSize: "14px", color: "var(--color-text-primary)", marginBottom: "4px" }}>{product.name}</h4>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                     <span style={{ fontFamily: "Poppins", fontWeight: 700, fontSize: "16px", color: "var(--color-green-dark)" }}>{product.price}</span>
-                    <button style={{ background: "var(--color-green-pale)", border: "none", borderRadius: "50%", width: "30px", height: "30px", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", fontSize: "18px", color: "var(--color-green-dark)", transition: "background 0.2s" }}>+</button>
+                    <button onClick={(e) => e.preventDefault()} style={{ background: "var(--color-green-pale)", border: "none", borderRadius: "50%", width: "30px", height: "30px", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", fontSize: "18px", color: "var(--color-green-dark)", transition: "background 0.2s" }}>+</button>
                   </div>
                 </div>
               </div>
+              </Link>
             ))}
           </div>
         </div>
       </div>
-      <style>{`@media (max-width: 900px) { .products-grid { grid-template-columns: 1fr !important; } }`}</style>
+      <style>{`
+        @media (max-width: 900px) { .products-grid { grid-template-columns: 1fr !important; } }
+        @media (max-width: 480px) {
+          .products-right-grid {
+            grid-template-columns: 1fr !important;
+          }
+          .products-search-wrap {
+            padding: 4px 4px 4px 12px !important;
+            gap: 4px !important;
+          }
+          .products-search-wrap input {
+            font-size: 13px !important;
+          }
+          .products-search-wrap button {
+            padding: 8px 16px !important;
+            font-size: 12px !important;
+          }
+        }
+      `}</style>
     </section>
   );
 }
@@ -721,29 +794,29 @@ function AICareSection() {
 
           {/* Left — Phone Mockup */}
           <div style={{ display: "flex", justifyContent: "center", position: "relative", opacity: visible ? 1 : 0, transform: visible ? "translateY(0)" : "translateY(48px)", transition: "opacity 0.7s ease, transform 0.7s ease" }}>
-            <div style={{ width: "280px", background: "#1A1A1A", borderRadius: "40px", padding: "12px", boxShadow: "0 24px 60px rgba(0,0,0,0.25), inset 0 0 0 1px rgba(255,255,255,0.1)", position: "relative", zIndex: 2 }}>
+            <div style={{ width: "280px", background: "#1A1A1A", borderRadius: "40px", padding: "12px", boxShadow: "0 24px 60px rgba(0,0,0,0.25), inset 0 0 0 1px rgba(255,255,255,0.1)", position: "relative", zIndex: 2 }} className="ai-phone-mockup">
               <div style={{ width: "100px", height: "28px", background: "#1A1A1A", borderRadius: "16px", margin: "0 auto 8px", position: "relative", zIndex: 3 }} />
               <div style={{ background: "#F0F8F0", borderRadius: "28px", overflow: "hidden", minHeight: "440px", padding: "16px" }}>
                 <Image src="/ai-phone.png" alt="Smart Care AI interface" width={256} height={440} sizes="256px" style={{ width: "100%", height: "auto", borderRadius: "20px" }} />
               </div>
             </div>
 
-            <div style={{ position: "absolute", top: "-20px", right: "20px", animation: "float 2.5s ease-in-out infinite", background: "rgba(107,189,227,0.15)", borderRadius: "50%", padding: "10px", backdropFilter: "blur(4px)", border: "1px solid rgba(107,189,227,0.3)" }}>
+            <div style={{ position: "absolute", top: "-20px", right: "20px", animation: "float 2.5s ease-in-out infinite", background: "rgba(107,189,227,0.15)", borderRadius: "50%", padding: "10px", backdropFilter: "blur(4px)", border: "1px solid rgba(107,189,227,0.3)" }} className="ai-float-icon">
               <WaterDroplet size={28} color="#6BBDE3" />
             </div>
-            <div style={{ position: "absolute", top: "20px", right: "-60px", animation: "float 4s ease-in-out infinite 1s", filter: "drop-shadow(0 4px 8px rgba(0,0,0,0.1))" }}>
+            <div style={{ position: "absolute", top: "20px", right: "-60px", animation: "float 4s ease-in-out infinite 1s", filter: "drop-shadow(0 4px 8px rgba(0,0,0,0.1))" }} className="ai-float-icon">
               <CloudIcon />
             </div>
-            <div style={{ position: "absolute", bottom: "80px", right: "-40px", animation: "float 3s ease-in-out infinite 0.5s" }}>
+            <div style={{ position: "absolute", bottom: "80px", right: "-40px", animation: "float 3s ease-in-out infinite 0.5s" }} className="ai-float-icon">
               <SunIcon size={44} />
             </div>
-            <div style={{ position: "absolute", bottom: "20px", right: "10px", animation: "drip 2s ease-in infinite 0.5s" }}>
+            <div style={{ position: "absolute", bottom: "20px", right: "10px", animation: "drip 2s ease-in infinite 0.5s" }} className="ai-float-icon">
               <WaterDroplet size={20} color="#6BBDE3" />
             </div>
-            <span style={{ position: "absolute", top: "40%", left: "-20px", fontSize: "24px", color: "var(--color-accent-yellow)", animation: "pulse-star 2s ease-in-out infinite" }}>✦</span>
+            <span style={{ position: "absolute", top: "40%", left: "-20px", fontSize: "24px", color: "var(--color-accent-yellow)", animation: "pulse-star 2s ease-in-out infinite" }} className="ai-float-icon">✦</span>
 
             {/* Animated dashed arcs */}
-            <svg style={{ position: "absolute", top: "0", left: "0", width: "100%", height: "100%", pointerEvents: "none", zIndex: 1 }} viewBox="0 0 400 500" fill="none">
+            <svg style={{ position: "absolute", top: "0", left: "0", width: "100%", height: "100%", pointerEvents: "none", zIndex: 1 }} viewBox="0 0 400 500" fill="none" className="ai-float-icon">
               <path d="M 300 100 Q 380 200 360 350" stroke="var(--color-green-light)" strokeWidth="2" strokeDasharray="8 6" strokeLinecap="round">
                 <animate attributeName="stroke-dashoffset" from="200" to="0" dur="3s" repeatCount="indefinite" />
               </path>
@@ -754,7 +827,7 @@ function AICareSection() {
           </div>
 
           {/* Right — Text */}
-          <div style={{ opacity: visible ? 1 : 0, transform: visible ? "translateX(0)" : "translateX(32px)", transition: "opacity 0.7s ease 0.2s, transform 0.7s ease 0.2s" }}>
+          <div style={{ opacity: visible ? 1 : 0, transform: visible ? "translateX(0)" : "translateX(32px)", transition: "opacity 0.7s ease 0.2s, transform 0.7s ease 0.2s" }} className="ai-text-col">
             <div style={{ marginBottom: "20px" }}><span className="badge-pill">🤖 Smart Care with AI 🌿</span></div>
             <h2 style={{ fontFamily: "'Playfair Display', serif", fontWeight: 800, fontSize: "clamp(32px, 4vw, 52px)", color: "var(--color-green-dark)", lineHeight: 1.1, marginBottom: "20px" }}>
               Never Let a<br />Plant Die Again.
@@ -781,7 +854,14 @@ function AICareSection() {
           </div>
         </div>
       </div>
-      <style>{`@media (max-width: 768px) { .ai-grid { grid-template-columns: 1fr !important; } }`}</style>
+      <style>{`
+        @media (max-width: 768px) {
+          .ai-grid { grid-template-columns: 1fr !important; }
+          .ai-float-icon { display: none !important; }
+          .ai-text-col { text-align: center !important; display: flex; flex-direction: column; align-items: center; }
+          .ai-text-col p { max-width: 100% !important; }
+        }
+      `}</style>
     </section>
   );
 }
@@ -801,15 +881,15 @@ function CommunityBanner() {
       <span style={{ position: "absolute", bottom: "20px", right: "30%", fontSize: "14px", color: "var(--color-accent-yellow)", animation: "pulse-star 3s ease-in-out infinite 1s", opacity: 0.7 }}>✦</span>
 
       <div className="container" style={{ position: "relative", zIndex: 2 }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "40px", flexWrap: "wrap" }}>
-          <div style={{ flex: 1, minWidth: "300px" }}>
-            <h2 style={{ fontFamily: "'Playfair Display', serif", fontWeight: 800, fontSize: "clamp(28px, 4vw, 48px)", color: "white", lineHeight: 1.1, marginBottom: "16px" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "40px", flexWrap: "wrap" }} className="community-flex">
+          <div style={{ flex: 1, minWidth: "300px" }} className="community-left">
+            <h2 style={{ fontFamily: "'Playfair Display', serif", fontWeight: 800, fontSize: "clamp(28px, 4vw, 48px)", color: "white", lineHeight: 1.1, marginBottom: "16px" }} className="community-title">
               Join Our Green<br />Community
             </h2>
-            <p style={{ fontFamily: "DM Sans", fontSize: "17px", color: "rgba(255,255,255,0.75)", lineHeight: 1.7, marginBottom: "28px", maxWidth: "480px" }}>
+            <p style={{ fontFamily: "DM Sans", fontSize: "17px", color: "rgba(255,255,255,0.75)", lineHeight: 1.7, marginBottom: "28px", maxWidth: "480px" }} className="community-text">
               Connect with 10,000+ plant lovers. Share your garden journey, get expert advice, and grow together. 🌿
             </p>
-            <div style={{ display: "flex", gap: "16px", flexWrap: "wrap" }}>
+            <div style={{ display: "flex", gap: "16px", flexWrap: "wrap" }} className="community-btns">
               <button id="join-community-btn"
                 style={{ background: "white", color: "var(--color-green-dark)", fontFamily: "Poppins", fontWeight: 700, fontSize: "15px", padding: "14px 32px", borderRadius: "var(--radius-xl)", border: "none", cursor: "pointer", boxShadow: "0 4px 16px rgba(0,0,0,0.2)", transition: "transform 0.2s ease, box-shadow 0.2s ease", display: "flex", alignItems: "center", gap: "8px" }}
                 onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.transform = "scale(1.03)"; (e.currentTarget as HTMLButtonElement).style.boxShadow = "0 8px 24px rgba(0,0,0,0.3)"; }}
@@ -823,9 +903,9 @@ function CommunityBanner() {
             </div>
           </div>
 
-          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "20px" }}>
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "20px" }} className="community-right">
             <div style={{ fontSize: "80px", animation: "float 3s ease-in-out infinite", filter: "drop-shadow(0 8px 16px rgba(0,0,0,0.2))", lineHeight: 1 }}>🤖</div>
-            <div style={{ display: "flex", gap: "24px" }}>
+            <div style={{ display: "flex", gap: "24px" }} className="community-stats-wrap">
               {[{ val: "10K+", label: "Members" }, { val: "50K+", label: "Plants Shared" }, { val: "99%", label: "Satisfaction" }].map((stat) => (
                 <div key={stat.label} style={{ textAlign: "center" }}>
                   <div style={{ fontFamily: "Poppins", fontWeight: 700, fontSize: "22px", color: "white" }}>{stat.val}</div>
@@ -836,6 +916,30 @@ function CommunityBanner() {
           </div>
         </div>
       </div>
+      <style>{`
+        @media (max-width: 768px) {
+          .community-flex {
+            flex-direction: column !important;
+            text-align: center !important;
+            gap: 32px !important;
+          }
+          .community-left {
+            min-width: 100% !important;
+          }
+          .community-btns {
+            justify-content: center !important;
+          }
+          .community-title br {
+            display: none !important;
+          }
+          .community-text {
+            max-width: 100% !important;
+          }
+          .community-stats-wrap {
+            gap: 12px !important;
+          }
+        }
+      `}</style>
     </section>
   );
 }
@@ -845,7 +949,7 @@ function CommunityBanner() {
 ═══════════════════════════════════════════════════ */
 function Footer() {
   return (
-    <footer style={{ background: "#1D3A18", color: "white", padding: "48px 0 28px" }}>
+    <footer style={{ background: "#1D3A18", color: "white", padding: "48px 0 28px" }} className="footer-wrap">
       <div className="container">
         <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr 1fr", gap: "40px", marginBottom: "40px" }} className="footer-grid">
           <div>
@@ -875,7 +979,7 @@ function Footer() {
             </div>
           ))}
         </div>
-        <div style={{ borderTop: "1px solid rgba(255,255,255,0.1)", paddingTop: "24px", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "16px" }}>
+        <div style={{ borderTop: "1px solid rgba(255,255,255,0.1)", paddingTop: "24px", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "16px" }} className="footer-bottom">
           <p style={{ fontFamily: "DM Sans", fontSize: "13px", color: "rgba(255,255,255,0.45)" }}>© 2026 Hero. All rights reserved. Made with 🌿</p>
           <div style={{ display: "flex", gap: "20px" }}>
             {["🌿", "🐦", "📸", "▶"].map((icon, i) => (
@@ -888,7 +992,15 @@ function Footer() {
         </div>
       </div>
       <style>{`
-        @media (max-width: 768px) { .footer-grid { grid-template-columns: 1fr 1fr !important; } }
+        @media (max-width: 768px) {
+          .footer-wrap { padding: 40px 16px 20px !important; }
+          .footer-grid { grid-template-columns: 1fr 1fr !important; }
+          .footer-bottom {
+            flex-direction: column !important;
+            text-align: center !important;
+            gap: 16px !important;
+          }
+        }
         @media (max-width: 480px) { .footer-grid { grid-template-columns: 1fr !important; } }
       `}</style>
     </footer>
@@ -922,8 +1034,21 @@ function WhatsAppWidget() {
 
   return (
     <div>
+      <style>{`
+        @media (max-width: 768px) {
+          .wa-floating-panel {
+            bottom: calc(88px + 60px + env(safe-area-inset-bottom, 0px)) !important;
+            right: 16px !important;
+          }
+          .wa-floating-btn {
+            bottom: calc(20px + 60px + env(safe-area-inset-bottom, 0px)) !important;
+            right: 16px !important;
+          }
+        }
+      `}</style>
+
       {/* Panel */}
-      <div style={{ position: "fixed", right: 20, bottom: 88, zIndex: 9999, transition: "opacity 0.2s", opacity: open ? 1 : 0, pointerEvents: open ? "auto" : "none" }}>
+      <div className="wa-floating-panel" style={{ position: "fixed", right: 20, bottom: 88, zIndex: 9999, transition: "opacity 0.2s", opacity: open ? 1 : 0, pointerEvents: open ? "auto" : "none" }}>
         <div style={{ width: 300, background: "white", borderRadius: 12, boxShadow: "0 12px 36px rgba(0,0,0,0.18)", overflow: "hidden", fontFamily: "DM Sans" }}>
           <div style={{ padding: "14px 12px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
             <div>
@@ -944,7 +1069,7 @@ function WhatsAppWidget() {
       </div>
 
       {/* Floating Button */}
-      <div style={{ position: "fixed", right: 20, bottom: 20, zIndex: 9999 }}>
+      <div className="wa-floating-btn" style={{ position: "fixed", right: 20, bottom: 20, zIndex: 9999 }}>
         <button onClick={() => setOpen((s) => !s)} aria-label={open ? "Close chat" : "Open WhatsApp chat"} style={{ width: 56, height: 56, borderRadius: 999, background: "#25D366", border: "none", boxShadow: "0 8px 24px rgba(37,211,102,0.28)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
           {open ? (
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>

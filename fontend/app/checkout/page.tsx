@@ -851,6 +851,27 @@ function CheckoutContent() {
         .emi-row.active {
           background: ${T.greenLight};
         }
+
+        @media (max-width: 600px) {
+          .checkout-container {
+            padding: 24px 16px !important;
+          }
+          .panel-card {
+            padding: 20px !important;
+          }
+        }
+        @media (max-width: 500px) {
+          .steps-header {
+            gap: 8px !important;
+            margin-bottom: 24px !important;
+          }
+          .step-label {
+            font-size: 11px !important;
+          }
+          .step-divider {
+            width: 20px !important;
+          }
+        }
       `}</style>
 
       {/* Checkout Steps Header */}

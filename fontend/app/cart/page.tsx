@@ -271,13 +271,15 @@ export default function CartPage() {
         @media (max-width: 600px) {
           .cart-item-row {
             flex-direction: column !important;
-            align-items: flex-start !important;
+            align-items: center !important;
+            text-align: center !important;
             gap: 14px !important;
             position: relative;
           }
           .item-image-container {
-            width: 100% !important;
-            height: 160px !important;
+            width: 120px !important;
+            height: 120px !important;
+            margin: 0 auto !important;
           }
           .qty-actions-row {
             width: 100% !important;
@@ -290,16 +292,25 @@ export default function CartPage() {
             right: 12px;
           }
         }
+        @media (max-width: 480px) {
+          .cart-main-container {
+            padding: 24px 16px !important;
+          }
+          .cart-title {
+            font-size: 28px !important;
+            margin-bottom: 20px !important;
+          }
+        }
       `}</style>
 
       {/* Navbar header */}
       <SharedNavbar cartCount={totalCartCount} />
 
       {/* Main Content */}
-      <div style={{ maxWidth: 1200, margin: "0 auto", padding: "40px 24px" }} className="fade-up">
+      <div style={{ maxWidth: 1200, margin: "0 auto", padding: "40px 24px" }} className="cart-main-container fade-up">
         
         {/* Title */}
-        <h1 style={{ fontFamily: "'Playfair Display', serif", fontStyle: "italic", fontWeight: 700, fontSize: 36, color: T.heading, marginBottom: 28 }}>
+        <h1 style={{ fontFamily: "'Playfair Display', serif", fontStyle: "italic", fontWeight: 700, fontSize: 36, color: T.heading, marginBottom: 28 }} className="cart-title">
           Shopping Cart
         </h1>
 
