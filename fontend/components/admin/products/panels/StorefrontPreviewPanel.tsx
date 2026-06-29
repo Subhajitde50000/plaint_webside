@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { ProductFormData } from '../types';
-import { Panel, GhostButton } from '../ui';
+import { Panel } from '../ui';
 
 interface Props {
   data: ProductFormData;
@@ -15,6 +15,9 @@ export function StorefrontPreviewPanel({ data, isNew }: Props) {
   const common = data.commonName;
   const price = data.currentPrice ? `₹${data.currentPrice}` : '—';
   const compareAt = data.compareAtPrice ? `₹${data.compareAtPrice}` : '';
+
+  const slug = data.urlHandle || (data.title ? data.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') : '');
+  const canOpen = !!slug && data.productStatus === 'active';
 
   let discount = '';
   if (data.currentPrice && data.compareAtPrice) {
@@ -30,7 +33,24 @@ export function StorefrontPreviewPanel({ data, isNew }: Props) {
           Storefront Preview
         </p>
         {!isNew && (
-          <GhostButton size="sm">Open ↗</GhostButton>
+          <a
+            href={canOpen ? `/products/${slug}` : '#'}
+            target={canOpen ? '_blank' : undefined}
+            rel="noopener noreferrer"
+            onClick={e => { if (!canOpen) e.preventDefault(); }}
+            title={!slug ? 'Add a title first' : !canOpen ? 'Publish product first to view on storefront' : `Open /products/${slug}`}
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 4,
+              background: 'transparent', border: '1px solid #444c56',
+              borderRadius: 6, color: canOpen ? '#adbac7' : '#545d68',
+              fontSize: 11, fontWeight: 600, padding: '5px 10px',
+              textDecoration: 'none', cursor: canOpen ? 'pointer' : 'not-allowed',
+              opacity: canOpen ? 1 : 0.5, transition: 'all 0.15s',
+              fontFamily: "'Outfit', sans-serif",
+            }}
+          >
+            Open ↗
+          </a>
         )}
       </div>
 
@@ -119,8 +139,28 @@ export function StorefrontPreviewPanel({ data, isNew }: Props) {
 
       {/* Preview links */}
       <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-        <GhostButton size="sm" style={{ flex: 1, justifyContent: 'center' }}>Preview PDP →</GhostButton>
-        <GhostButton size="sm" style={{ flex: 1, justifyContent: 'center' }}>Preview PLP Card</GhostButton>
+        {[
+          { label: 'Preview PDP →', href: slug ? `/products/${slug}` : '#' },
+          { label: 'Preview PLP Card', href: slug ? `/collections/plants` : '#' },
+        ].map(({ label, href }) => (
+          <a
+            key={label}
+            href={href}
+            target={slug ? '_blank' : undefined}
+            rel="noopener noreferrer"
+            onClick={e => { if (!slug) e.preventDefault(); }}
+            title={slug ? `Open ${href}` : 'Add a product title first'}
+            style={{
+              flex: 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+              background: 'transparent', border: '1px solid #444c56',
+              borderRadius: 6, color: slug ? '#adbac7' : '#545d68',
+              fontSize: 11, fontWeight: 600, padding: '6px 8px',
+              textDecoration: 'none', cursor: slug ? 'pointer' : 'not-allowed',
+              opacity: slug ? 1 : 0.5, transition: 'all 0.15s',
+              fontFamily: "'Outfit', sans-serif",
+            }}
+          >{label}</a>
+        ))}
       </div>
     </Panel>
   );

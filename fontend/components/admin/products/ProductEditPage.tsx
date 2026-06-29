@@ -150,12 +150,20 @@ export function ProductEditPage({ mode, productId, initialData }: Props) {
   /* Keyboard shortcuts */
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === 's') { e.preventDefault(); handleSaveDraft(); }
-      if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') { e.preventDefault(); handlePublish(); }
+      // Close any open modal on Escape
+      if (e.key === 'Escape') {
+        if (showUnsaved) { setShowUnsaved(false); return; }
+        if (showDuplicate) { setShowDuplicate(false); return; }
+        if (showDelete) { setShowDelete(false); return; }
+      }
+      // Save / Publish shortcuts (only when no modal is open)
+      const modalOpen = showUnsaved || showDuplicate || showDelete;
+      if (!modalOpen && (e.metaKey || e.ctrlKey) && e.key === 's') { e.preventDefault(); handleSaveDraft(); }
+      if (!modalOpen && (e.metaKey || e.ctrlKey) && e.key === 'Enter') { e.preventDefault(); handlePublish(); }
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  });
+  }, [showUnsaved, showDuplicate, showDelete]);
 
   /* Toast auto-dismiss */
   useEffect(() => {
@@ -271,21 +279,43 @@ export function ProductEditPage({ mode, productId, initialData }: Props) {
 
           {/* Header actions */}
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-            {!isNew && (
-              <>
+            {/* View on Storefront — always visible, uses urlHandle or slugified title */}
+            {(() => {
+              const slug = data.urlHandle || (data.title ? data.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') : '');
+              const canView = !!slug && data.productStatus === 'active';
+              const href = slug ? `/products/${slug}` : '#';
+              return (
                 <a
-                  href={`/products/${data.urlHandle}`}
-                  target="_blank"
+                  href={href}
+                  target={canView ? '_blank' : undefined}
                   rel="noopener noreferrer"
+                  onClick={e => { if (!canView) e.preventDefault(); }}
+                  title={
+                    !slug
+                      ? 'Add a product title first'
+                      : data.productStatus !== 'active'
+                        ? 'Product must be published (Active) to view on storefront'
+                        : `Open /products/${slug}`
+                  }
                   style={{
                     display: 'inline-flex', alignItems: 'center', gap: 5,
-                    background: 'transparent', border: '1px solid #444c56', borderRadius: 6,
-                    color: '#adbac7', fontSize: 12, fontWeight: 600, padding: '7px 14px',
-                    textDecoration: 'none', cursor: 'pointer',
+                    background: 'transparent',
+                    border: `1px solid ${canView ? '#444c56' : '#2d333b'}`,
+                    borderRadius: 6,
+                    color: canView ? '#adbac7' : '#545d68',
+                    fontSize: 12, fontWeight: 600, padding: '7px 14px',
+                    textDecoration: 'none',
+                    cursor: canView ? 'pointer' : 'not-allowed',
+                    opacity: canView ? 1 : 0.55,
+                    transition: 'all 0.15s',
                   }}
                 >
                   View on Storefront ↗
                 </a>
+              );
+            })()}
+            {!isNew && (
+              <>
                 <button type="button" onClick={() => setShowDuplicate(true)} style={headerGhostBtn}>
                   Duplicate
                 </button>
