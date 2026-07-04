@@ -667,7 +667,7 @@ function OverviewSection() {
                   <Pie data={SALES_CATEGORIES} dataKey="value" innerRadius={60} outerRadius={90} strokeWidth={2} stroke={T.bgSurface}>
                     {SALES_CATEGORIES.map((c, i) => <Cell key={i} fill={c.color} />)}
                   </Pie>
-                  <Tooltip formatter={(v: number) => [`${v}%`, ""]} contentStyle={CustomTooltipStyle} />
+                  <Tooltip formatter={(v) => [`${v}%`, ""]} contentStyle={CustomTooltipStyle} />
                 </PieChart>
               </ResponsiveContainer>
               <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: "8px" }}>
@@ -675,7 +675,7 @@ function OverviewSection() {
                   <div key={i} style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                     <span style={{ width: "8px", height: "8px", borderRadius: "50%", background: c.color, flexShrink: 0 }} />
                     <span style={{ fontSize: "12px", color: T.text, flex: 1 }}>{c.name}</span>
-                    <span style={{ fontSize: "11px", fontWeight: 600, color: T.textLabel }}>{c.pct}%</span>
+                    <span style={{ fontSize: "11px", fontWeight: 600, color: T.textLabel }}>{c.value}%</span>
                     <span style={{ fontSize: "11px", color: T.textMuted }}>{c.revenue}</span>
                   </div>
                 ))}
@@ -1087,7 +1087,7 @@ function ProductsSection() {
               <Pie data={PRODUCT_CATS} dataKey="pct" innerRadius={65} outerRadius={95} strokeWidth={2} stroke={T.bgSurface}>
                 {PRODUCT_CATS.map((c, i) => <Cell key={i} fill={c.color} />)}
               </Pie>
-              <Tooltip contentStyle={CustomTooltipStyle} formatter={(v: number) => [`${v}%`, ""]} />
+              <Tooltip contentStyle={CustomTooltipStyle} formatter={(v) => [`${v}%`, ""]} />
             </PieChart>
           </ResponsiveContainer>
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "12px" }}>
@@ -1357,7 +1357,7 @@ function MarketingSection() {
       </ChartPanel>
 
       {/* Campaign Performance */}
-      <ChartPanel title="Email Campaigns" toolbar={<span style={{ fontSize: "10px", color: T.textMuted, padding: "2px 8px", border: `1px solid ${T.info}`, borderRadius: "999px", color: T.info }}>Klaviyo Connected</span>}>
+      <ChartPanel title="Email Campaigns" toolbar={<span style={{ fontSize: "10px", color: T.info, padding: "2px 8px", border: `1px solid ${T.info}`, borderRadius: "999px" }}>Klaviyo Connected</span>}>
         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "12px" }}>
           <thead>
             <tr>
