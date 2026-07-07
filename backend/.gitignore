@@ -1,0 +1,5 @@
+.venv
+venv
+.env
+.env.example
+plant_database.sql
