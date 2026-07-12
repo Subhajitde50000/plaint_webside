@@ -1,7 +1,7 @@
+venu
 .venv
-venv
-.env
 .env.example
-plant_database.sql
+.env
 backend_file_stacher.txt
+__pycache__
 test.ipynb
