@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, Query, HTTPException
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import and_, or_, func
 from typing import Optional, List
+
 from app.database import get_db
 from app.models.product import Product, ProductVariant, ProductImage
 from app.schemas.product import ProductListResponse, ProductDetailResponse
