@@ -1,13 +1,7 @@
 venu
-
 .venv
-
 .env.example
-
 .env
-
 backend_file_stacher.txt
-
 __pycache__
-
 test.ipynb
