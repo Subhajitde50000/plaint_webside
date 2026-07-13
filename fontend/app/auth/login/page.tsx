@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { useLogin } from "@/features/auth/hooks/useLogin";
 
 /* ── Floating leaf SVG decoration ── */
 function LeafDecor({ style }: { style?: React.CSSProperties }) {
@@ -27,9 +28,11 @@ export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
+  const [fieldErrors, setFieldErrors] = useState<{ email?: string; password?: string }>({});
   const [rememberMe, setRememberMe] = useState(false);
+
+  // ── Real API hook ──────────────────────────────────────────────────────────
+  const { login, isLoading: loading, error: apiError, isUnverified, isBlocked } = useLogin();
 
   const validate = () => {
     const errs: { email?: string; password?: string } = {};
@@ -43,14 +46,14 @@ export default function LoginPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const errs = validate();
-    if (Object.keys(errs).length) { setErrors(errs); return; }
-    setErrors({});
-    setLoading(true);
-    await new Promise((r) => setTimeout(r, 1800));
-    setLoading(false);
-    // Navigate to home on success
-    window.location.href = "/";
+    if (Object.keys(errs).length) { setFieldErrors(errs); return; }
+    setFieldErrors({});
+    // Call real API — useLogin handles token storage, profile fetch, and redirect
+    login(email, password);
   };
+
+  // Alias for backward compat with existing JSX that uses `errors`
+  const errors = fieldErrors;
 
   return (
     <>

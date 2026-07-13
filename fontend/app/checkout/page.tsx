@@ -4,6 +4,8 @@ import { useState, useEffect, useRef, Suspense } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import SharedNavbar from "@/components/Navbar";
+import { useCheckout } from "@/features/orders/hooks/useCheckout";
+import { useCart } from "@/features/cart/hooks/useCart";
 
 /* ── Design Tokens ─────────────────────────────────────── */
 const T = {
@@ -281,42 +283,28 @@ function CheckoutContent() {
     setStep("payment");
   };
 
-  // Submit payment form handler
+  // ── Real API hooks ────────────────────────────────────────────────────────
+  const { placeOrder, isPlacing, error: checkoutError } = useCheckout();
+  const { cart } = useCart();
+
+  // Submit payment form handler — triggers Razorpay modal via useCheckout
   const handlePaymentSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    
-    // Check validation based on selected payment method
-    if (paymentMethod === "card") {
-      if (!cardNumber || !cardName || !cardExpiry || !cardCvv) {
-        alert("Please fill out all Credit Card fields.");
-        return;
-      }
-    } else if (paymentMethod === "upi") {
-      if (!upiId && !selectedUpiApp) {
-        alert("Please enter a UPI ID or scan the QR Code.");
-        return;
-      }
-    } else if (paymentMethod === "netbanking") {
-      if (!selectedBank) {
-        alert("Please select a bank for Net Banking.");
-        return;
-      }
-    } else if (paymentMethod === "emi") {
-      if (!selectedEmiBank || !selectedEmiTenure) {
-        alert("Please select an EMI bank and installment tenure plan.");
-        return;
-      }
-    } else if (paymentMethod === "cod") {
-      if (!codConfirmed) {
-        alert("Please confirm the Cash on Delivery terms by checking the box.");
-        return;
-      }
+
+    if (!activeAddress) {
+      alert("Please select or add a delivery address.");
+      return;
     }
-    
-    // Generate order number
-    orderNumber.current = "#PB-" + Math.floor(1000 + Math.random() * 9000);
-    setStep("success");
+
+    // placeOrder calls POST /orders/, opens Razorpay, verifies payment,
+    // clears cart, and redirects to /orders/{uuid}/success on completion.
+    placeOrder({
+      addressId: String(activeAddress.id),
+    });
   };
+
+  // Expose loading state to UI
+  const checkoutLoading = isPlacing;
 
   // Format Card Number (auto space)
   const handleNumberChange = (e: React.ChangeEvent<HTMLInputElement>) => {

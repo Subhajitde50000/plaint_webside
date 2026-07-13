@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect, useCallback, Suspense } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
+import { useVerifyOtp } from "@/features/auth/hooks/useVerifyOtp";
 
 function LeafDecor({ style }: { style?: React.CSSProperties }) {
   return (
@@ -40,27 +41,31 @@ function OTPContent() {
   const email = searchParams.get("email") || "your@email.com";
 
   const [otp, setOtp] = useState(["", "", "", "", "", ""]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-  const [success, setSuccess] = useState(false);
-  const [resendTimer, setResendTimer] = useState(59);
-  const [canResend, setCanResend] = useState(false);
-  const [resending, setResending] = useState(false);
+  const [localError, setLocalError] = useState("");
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
 
-  /* countdown timer */
-  useEffect(() => {
-    if (resendTimer <= 0) { setCanResend(true); return; }
-    const t = setTimeout(() => setResendTimer((p) => p - 1), 1000);
-    return () => clearTimeout(t);
-  }, [resendTimer]);
+  // ── Real API hook ──────────────────────────────────────────────────────────
+  const {
+    verify,
+    resend,
+    isVerifying: loading,
+    isResending: resending,
+    isSuccess: success,
+    verifyError,
+    canResend,
+    resendIn: resendTimer,
+  } = useVerifyOtp();
+
+  const error = localError || verifyError || "";
+
+  // Timer and canResend state are fully managed by useVerifyOtp hook
 
   const handleOtpChange = (index: number, value: string) => {
     const cleaned = value.replace(/\D/g, "").slice(-1);
     const next = [...otp];
     next[index] = cleaned;
     setOtp(next);
-    setError("");
+    setLocalError("");
     if (cleaned && index < 5) {
       inputRefs.current[index + 1]?.focus();
     }
@@ -88,29 +93,21 @@ function OTPContent() {
 
   const handleVerify = useCallback(async () => {
     const code = otp.join("");
-    if (code.length < 6) { setError("Please enter the complete 6-digit code"); return; }
-    setLoading(true);
-    await new Promise((r) => setTimeout(r, 1800));
-    setLoading(false);
-    // Simulate success (in real app, verify against backend)
-    if (code === "123456") {
-      setError("Invalid OTP. Please try again.");
-      return;
-    }
-    setSuccess(true);
-    setTimeout(() => { window.location.href = "/"; }, 2500);
-  }, [otp]);
+    if (code.length < 6) { setLocalError("Please enter the complete 6-digit code"); return; }
+    setLocalError("");
+    // Call real API — useVerifyOtp handles redirect to / on success
+    verify(code);
+  }, [otp, verify]);
 
   const handleResend = async () => {
-    setResending(true);
-    await new Promise((r) => setTimeout(r, 1200));
-    setResending(false);
-    setCanResend(false);
-    setResendTimer(59);
     setOtp(["", "", "", "", "", ""]);
-    setError("");
+    setLocalError("");
     inputRefs.current[0]?.focus();
+    // Call real API — useVerifyOtp resets timers on success
+    resend();
   };
+
+  // Remove old timer effects — managed by useVerifyOtp hook
 
   const maskedEmail = email.replace(/(.{2})(.*)(@.*)/, (_, a, b, c) => a + "*".repeat(Math.max(b.length, 3)) + c);
 

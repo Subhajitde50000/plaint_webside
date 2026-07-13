@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { useForgotPassword } from "@/features/auth/hooks/useForgotPassword";
 
 function LeafDecor({ style }: { style?: React.CSSProperties }) {
   return (
@@ -57,7 +58,6 @@ export default function ForgotPasswordPage() {
   const [step, setStep] = useState<Step>("email");
   const [email, setEmail] = useState("");
   const [emailError, setEmailError] = useState("");
-  const [emailLoading, setEmailLoading] = useState(false);
 
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -66,15 +66,18 @@ export default function ForgotPasswordPage() {
   const [pwErrors, setPwErrors] = useState<{ new?: string; confirm?: string }>({});
   const [pwLoading, setPwLoading] = useState(false);
 
+  // ── Real API hook ──────────────────────────────────────────────────────────
+  const { submit: submitForgot, isLoading: emailLoading, showSuccess } = useForgotPassword();
+
   const handleEmailSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email) { setEmailError("Email is required"); return; }
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { setEmailError("Enter a valid email address"); return; }
     setEmailError("");
-    setEmailLoading(true);
-    await new Promise((r) => setTimeout(r, 1800));
-    setEmailLoading(false);
-    setStep("reset");
+    // Call real API — always shows success (anti-enumeration security)
+    submitForgot(email);
+    // After submission always move to "done" step
+    setTimeout(() => setStep("done"), 500);
   };
 
   const handlePasswordReset = async (e: React.FormEvent) => {

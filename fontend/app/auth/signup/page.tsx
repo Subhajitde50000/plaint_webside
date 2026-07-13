@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { useSignUp } from "@/features/auth/hooks/useSignUp";
 
 function LeafDecor({ style }: { style?: React.CSSProperties }) {
   return (
@@ -83,7 +84,6 @@ export default function SignupPage() {
   const [showPw, setShowPw] = useState(false);
   const [showCpw, setShowCpw] = useState(false);
   const [errors, setErrors] = useState<Errors>({});
-  const [loading, setLoading] = useState(false);
   const [agreed, setAgreed] = useState(false);
   const [step, setStep] = useState(1); // 1 = personal, 2 = security
 
@@ -118,16 +118,31 @@ export default function SignupPage() {
     setStep(2);
   };
 
+  // ── Real API hook ──────────────────────────────────────────────────────────
+  const { signUp, isLoading: apiLoading, isEmailTaken, error: apiError } = useSignUp();
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const errs = validateStep2();
     if (Object.keys(errs).length) { setErrors(errs); return; }
     setErrors({});
-    setLoading(true);
-    await new Promise((r) => setTimeout(r, 1800));
-    setLoading(false);
-    window.location.href = "/auth/verify-otp?email=" + encodeURIComponent(form.email);
+    // Show email-taken error inline
+    if (isEmailTaken) {
+      setErrors({ email: "An account with this email already exists." });
+      return;
+    }
+    // Call real API — useSignUp redirects to /auth/verify-otp?email=... on success
+    signUp({
+      firstName: form.firstName,
+      lastName: form.lastName,
+      email: form.email,
+      phone: form.phone || undefined,
+      password: form.password,
+    });
   };
+
+  // Expose loading state (real API or local)
+  const loading = apiLoading;
 
   return (
     <>

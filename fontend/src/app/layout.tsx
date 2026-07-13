@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import { Providers } from "./providers";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { Toaster } from "sonner";
 import Script from "next/script";
 
@@ -18,11 +19,13 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body>
-        <Providers>
-          {children}
-          <Toaster position="top-right" richColors closeButton />
-        </Providers>
-        {/* Razorpay checkout SDK — loaded lazily */}
+        <ErrorBoundary>
+          <Providers>
+            {children}
+            <Toaster position="top-right" richColors closeButton />
+          </Providers>
+        </ErrorBoundary>
+        {/* Razorpay checkout script */}
         <Script
           src="https://checkout.razorpay.com/v1/checkout.js"
           strategy="lazyOnload"

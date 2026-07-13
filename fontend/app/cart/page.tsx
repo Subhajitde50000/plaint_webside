@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import SharedNavbar from "@/components/Navbar";
+import { useCart } from "@/features/cart/hooks/useCart";
 
 /* ── Design Tokens ─────────────────────────────────────── */
 const T = {
@@ -39,92 +40,51 @@ interface CartItem {
 }
 
 export default function CartPage() {
-  const [cartItems, setCartItems] = useState<CartItem[]>([
-    {
-      id: 1,
-      name: "Monstera Deliciosa",
-      category: "Indoor Plant",
-      price: 25.00,
-      quantity: 1,
-      img: "/monstera.png",
-      options: "Medium size · White Ceramic Pot",
-    },
-    {
-      id: 2,
-      name: "Wildflower Seeds Mix",
-      category: "Seeds",
-      price: 18.00,
-      quantity: 2,
-      img: "/cat-flowers.png",
-      options: "Pack of 3 · Premium Blend",
-    },
-    {
-      id: 3,
-      name: "Moisture Meter Pro",
-      category: "Tools",
-      price: 15.00,
-      quantity: 1,
-      img: "/product-spray.png", // fallback placeholder for tool spray/moisture meter
-      options: "Digital Probe · Battery Included",
-    },
-  ]);
+  // ── Real API cart hook ──────────────────────────────────────────────────────────
+  const {
+    cart,
+    isLoading: cartLoading,
+    addItem,
+    updateItem,
+    removeItem: removeCartItem,
+    applyDiscount,
+    removeDiscount,
+    isAddingItem,
+    discountError,
+  } = useCart();
+
+  // Derive local state from live cart data
+  const cartItems = cart?.items ?? [];
+  const subtotal = cart?.subtotal ?? 0;
+  const discountAmount = cart?.discount_amount ?? 0;
+  const total = cart?.total ?? 0;
+  const shippingFee = cart?.shipping_fee ?? 0;
+  const taxAmount = cart?.tax ?? 0;
+  const totalCartCount = cart?.item_count ?? 0;
 
   const [promoInput, setPromoInput] = useState("");
-  const [discountPercent, setDiscountPercent] = useState(0);
-  const [promoError, setPromoError] = useState("");
-  const [promoSuccess, setPromoSuccess] = useState("");
   const [mounted, setMounted] = useState(false);
 
-  useEffect(() => {
-    setMounted(true);
-  }, []);
+  useEffect(() => { setMounted(true); }, []);
 
-  // Handlers
-  const updateQuantity = (id: number, delta: number) => {
-    setCartItems(prev =>
-      prev.map(item => {
-        if (item.id === id) {
-          const newQty = item.quantity + delta;
-          return { ...item, quantity: newQty < 1 ? 1 : newQty };
-        }
-        return item;
-      })
-    );
+  // Map API actions to local handlers
+  const updateQuantity = (id: string, delta: number) => {
+    const item = cartItems.find((i: any) => i.uuid === id);
+    if (!item) return;
+    const newQty = item.quantity + delta;
+    if (newQty < 1) return;
+    updateItem({ itemId: id, quantity: newQty });
   };
 
-  const removeItem = (id: number) => {
-    // We could add an exit animation here
-    setCartItems(prev => prev.filter(item => item.id !== id));
-  };
+  const removeItem = (id: string) => removeCartItem(id);
 
   const applyPromo = (e: React.FormEvent) => {
     e.preventDefault();
-    setPromoError("");
-    setPromoSuccess("");
-
-    if (promoInput.trim().toUpperCase() === "GREENTHUMB") {
-      setDiscountPercent(10);
-      setPromoSuccess("10% discount applied successfully!");
-    } else if (promoInput.trim() === "") {
-      setPromoError("Please enter a coupon code.");
-    } else {
-      setPromoError("Invalid promo code. Try 'GREENTHUMB'.");
-    }
+    if (!promoInput.trim()) return;
+    applyDiscount(promoInput.trim().toUpperCase());
   };
 
-  // Calculations
-  const subtotal = cartItems.reduce((acc, item) => acc + item.price * item.quantity, 0);
-  const discountAmount = (subtotal * discountPercent) / 100;
   const postDiscountSubtotal = subtotal - discountAmount;
-  
-  // Free shipping over $50 after discount, otherwise $5.00
-  const shippingFee = postDiscountSubtotal >= 50 || cartItems.length === 0 ? 0 : 5.00;
-  
-  // Tax 8%
-  const taxAmount = postDiscountSubtotal * 0.08;
-  
-  const total = postDiscountSubtotal + shippingFee + taxAmount;
-  const totalCartCount = cartItems.reduce((acc, item) => acc + item.quantity, 0);
 
   return (
     <div style={{ background: T.bg, minHeight: "100vh", fontFamily: "Outfit, sans-serif", paddingTop: "64px" }}>
@@ -319,7 +279,7 @@ export default function CartPage() {
             
             {/* Left Column: Cart items */}
             <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 16 }}>
-              {cartItems.map(item => (
+              {cartItems.map((item: any) => (
                 <div key={item.id} className="cart-item-row scale-in">
                   
                   {/* Item Image */}
@@ -401,8 +361,8 @@ export default function CartPage() {
                     Apply
                   </button>
                 </form>
-                {promoError && <p style={{ fontSize: 12, color: T.red, marginTop: -14, marginBottom: 16 }}>{promoError}</p>}
-                {promoSuccess && <p style={{ fontSize: 12, color: T.green, marginTop: -14, marginBottom: 16 }}>{promoSuccess}</p>}
+                {discountError && <p style={{ fontSize: 12, color: T.red, marginTop: -14, marginBottom: 16 }}>{discountError}</p>}
+                {discountAmount > 0 && !discountError && <p style={{ fontSize: 12, color: T.green, marginTop: -14, marginBottom: 16 }}>Discount applied! 🎉</p>}
 
                 {/* Subtotals */}
                 <div style={{ display: "flex", flexDirection: "column", gap: 12, borderBottom: `1px solid ${T.border}`, paddingBottom: 16, marginBottom: 16 }}>
@@ -414,7 +374,7 @@ export default function CartPage() {
 
                   {discountAmount > 0 && (
                     <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14, color: T.green }}>
-                      <span>Discount ({discountPercent}%)</span>
+                      <span>Discount applied</span>
                       <span style={{ fontWeight: 500 }}>-${discountAmount.toFixed(2)}</span>
                     </div>
                   )}
