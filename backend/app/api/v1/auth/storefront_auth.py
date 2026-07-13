@@ -63,12 +63,13 @@ async def register(payload: RegisterRequest, db: Session = Depends(get_db)):
     db.add(Wishlist(user_id=user.id))
 
     # Verification token
-    token = generate_verification_token()
+    import random
+    token = "".join([str(random.randint(0, 9)) for _ in range(6)])
     db.add(VerificationToken(
         user_id=user.id,
         token=token,
         type="email_verify",
-        expires_at=datetime.now(timezone.utc) + timedelta(hours=24),
+        expires_at=datetime.now(timezone.utc) + timedelta(minutes=10),
     ))
     db.commit()
 
@@ -220,3 +221,65 @@ async def verify_email(token: str, db: Session = Depends(get_db)):
     record.used_at = datetime.now(timezone.utc)
     db.commit()
     return {"message": "Email verified successfully."}
+
+
+class VerifyOTPRequest(BaseModel):
+    email: EmailStr
+    otp: str
+
+
+class ResendOTPRequest(BaseModel):
+    email: EmailStr
+
+
+@router.post("/verify-otp")
+async def verify_otp(payload: VerifyOTPRequest, db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.email == payload.email.lower()).first()
+    if not user:
+        raise HTTPException(status_code=400, detail="User not found.")
+
+    record = db.query(VerificationToken).filter(
+        VerificationToken.user_id == user.id,
+        VerificationToken.token == payload.otp,
+        VerificationToken.type == "email_verify",
+        VerificationToken.used_at == None,
+        VerificationToken.expires_at > datetime.now(timezone.utc),
+    ).first()
+
+    if not record:
+        raise HTTPException(status_code=400, detail="Incorrect code. Please check and try again.")
+
+    user.email_verified = True
+    record.used_at = datetime.now(timezone.utc)
+    db.commit()
+    return {"message": "Email verified successfully."}
+
+
+@router.post("/resend-otp")
+async def resend_otp(payload: ResendOTPRequest, db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.email == payload.email.lower()).first()
+    if not user:
+        # Avoid email enumeration, return success message
+        return {"message": "A new code has been sent."}
+
+    # Revoke old active email_verify tokens for this user
+    db.query(VerificationToken).filter(
+        VerificationToken.user_id == user.id,
+        VerificationToken.type == "email_verify",
+        VerificationToken.used_at == None,
+    ).update({VerificationToken.used_at: datetime.now(timezone.utc)})
+
+    import random
+    token = "".join([str(random.randint(0, 9)) for _ in range(6)])
+    db.add(VerificationToken(
+        user_id=user.id,
+        token=token,
+        type="email_verify",
+        expires_at=datetime.now(timezone.utc) + timedelta(minutes=10),
+    ))
+    db.commit()
+
+    # Send verification email async via Celery
+    send_verification_email.delay(user.id, user.email, user.first_name, token)
+
+    return {"message": "A new code has been sent."}
