@@ -21,6 +21,7 @@ function LoginFormContent() {
     register,
     handleSubmit,
     setValue,
+    getValues,
     formState: { errors },
   } = useForm<LoginInput>({
     resolver: zodResolver(loginSchema),
@@ -37,7 +38,17 @@ function LoginFormContent() {
     }
   }, [initialEmail, setValue]);
 
+  // Handle email_not_verified error - redirect to OTP page
+  useEffect(() => {
+    if (error === "email_not_verified") {
+      const email = getValues("email");
+      // Redirect to verify-otp page with email
+      router.push(`/verify-otp?email=${encodeURIComponent(email)}`);
+    }
+  }, [error, router, getValues]);
+
   const onSubmit = (data: LoginInput) => {
+    console.log(data)
     login(data);
   };
 
@@ -303,7 +314,7 @@ function LoginFormContent() {
         )}
 
         {/* Global error banner */}
-        {error && (
+        {error && error !== "email_not_verified" && (
           <div className="global-error" role="alert">
             <span>⚠</span>
             <span>{error || "Something went wrong. Please check your credentials."}</span>
@@ -315,7 +326,7 @@ function LoginFormContent() {
           <label className="form-label">Email Address *</label>
           <input
             type="email"
-            placeholder="priya@email.com"
+            placeholder="Sutanu@email.com"
             {...register("email")}
             className={`form-input ${errors.email ? "error" : ""}`}
             disabled={isLoading}

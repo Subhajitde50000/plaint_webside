@@ -1,0 +1,52 @@
+                Register
+                    │
+                    ▼
+        Does email already exist?
+            │                │
+           No               Yes
+            │                │
+            ▼                ▼
+      Create account     Is verified?
+            │            │          │
+            ▼           Yes        No
+   is_verified=False     │          │
+            │            ▼          ▼
+     Generate OTP    Show "Email   Generate New OTP
+            │        already        Send Email
+            ▼        registered"    │
+      Send Email                   ▼
+            │               Redirect to Verify
+            ▼
+ Redirect to Verify Email
+            │
+            ▼
+      Verify OTP
+            │
+     ┌──────┴──────┐
+     │             │
+  Valid OTP     Invalid OTP
+     │             │
+     ▼             ▼
+is_verified=True  Show Error
+     │
+     ▼
+ Login Page
+     │
+     ▼
+ Enter Email + Password
+     │
+     ▼
+ Is Email Verified?
+     │
+ ┌───┴────┐
+ │        │
+No       Yes
+ │        │
+ ▼        ▼
+Send OTP  Verify Password
+ │        │
+ ▼        ▼
+Verify    Generate JWT
+ │        │
+ ▼        ▼
+Login     Dashboard

@@ -7,6 +7,8 @@ export const api = axios.create({
   headers: { "Content-Type": "application/json" },
 });
 
+let refreshPromise: Promise<string> | null = null;
+
 // Attach access token on every request
 api.interceptors.request.use((config) => {
   // Token is stored in memory via Zustand
@@ -20,12 +22,25 @@ api.interceptors.response.use(
   (res) => res,
   async (error) => {
     const original = error.config;
-    if (error.response?.status === 401 && !original._retry) {
+    const requestUrl = original?.url ?? "";
+    const isAuthRefreshRequest = requestUrl.includes("/auth/refresh");
+    const isAuthLoginRequest = requestUrl.includes("/auth/login");
+
+    if (error.response?.status === 401 && !original._retry && !isAuthRefreshRequest && !isAuthLoginRequest) {
       original._retry = true;
       try {
-        const { data } = await api.post("/auth/refresh");
-        (globalThis as any).__accessToken = data.access_token;
-        original.headers.Authorization = `Bearer ${data.access_token}`;
+        if (!refreshPromise) {
+          refreshPromise = api
+            .post("/auth/refresh")
+            .then(({ data }) => data.access_token as string)
+            .finally(() => {
+              refreshPromise = null;
+            });
+        }
+
+        const accessToken = await refreshPromise;
+        (globalThis as any).__accessToken = accessToken;
+        original.headers.Authorization = `Bearer ${accessToken}`;
         return api(original);
       } catch {
         // Refresh failed → clear state, go to login
