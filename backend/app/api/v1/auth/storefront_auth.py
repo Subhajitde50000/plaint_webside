@@ -226,6 +226,14 @@ async def forgot_password(payload: ForgotPasswordRequest, db: Session = Depends(
     print(payload)
     user = db.query(User).filter(User.email == payload.email.lower()).first()
     if user:
+        if user.email_verified == 0:
+            # send verification otp
+            _generate_and_send_otp(user.id, user.email, user.first_name, db=db)
+            raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="email_not_verified"
+            )
+
         token = generate_verification_token()
         db.add(VerificationToken(
             user_id=user.id,
