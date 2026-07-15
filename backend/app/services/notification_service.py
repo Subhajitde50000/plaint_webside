@@ -41,6 +41,7 @@ class NotificationService:
 
             # 5. Execute in thread pool to avoid blocking FastAPI
             await asyncio.to_thread(_send_sync)
+            print(f"\n \n [NotificationService] Email sent to {to_email} with template '{template_id}'")
             
         except Exception as e:
             # Log failure but don't crash the request (notifications are usually side-effects)

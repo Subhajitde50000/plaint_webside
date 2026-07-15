@@ -1,5 +1,5 @@
 import { api } from "@/lib/axios";
-import { SignUpInput, LoginInput } from "../schemas/auth.schema";
+import { SignUpInput } from "../schemas/auth.schema";
 
 export const registerApi = async (data: {
   firstName: string;
@@ -18,12 +18,13 @@ export const registerApi = async (data: {
   return res.data;
 };
 
-export const loginApi = async (data: LoginInput) => {
-  const res = await api.post("/auth/login", {
-    email: data.email.toLowerCase().trim(),
-    password: data.password,
+export const loginApi = async (email: string, password: string) => {
+  // FastAPI OAuth2PasswordRequestForm needs form-encoded body with 'username' field
+  const form = new URLSearchParams({ username: email.toLowerCase().trim(), password });
+  const res = await api.post("/auth/login", form, {
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
   });
-  return res.data;
+  return res.data as { access_token: string; token_type: string };
 };
 
 export const verifyOtpApi = async (email: string, otp: string) => {

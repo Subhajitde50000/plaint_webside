@@ -2,6 +2,7 @@ import uuid
 from datetime import datetime, timezone, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, status, Response, Request
+from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -12,12 +13,7 @@ from app.schemas.auth import (
     ResetPasswordRequest, TokenRefreshRequest,
 )
 
-# Inline login schema (separate from register)
 from pydantic import BaseModel, EmailStr
-
-class _LoginRequest(BaseModel):
-    email: EmailStr
-    password: str
 
 from app.utils.security import (
     hash_password, verify_password, create_access_token,
@@ -126,14 +122,13 @@ async def register(payload: RegisterRequest, db: Session = Depends(get_db)):
 
 @router.post("/login", response_model=LoginResponse)
 async def login(
-    payload: _LoginRequest,
-    response: Response,
+    form_data: OAuth2PasswordRequestForm = Depends(),
+    response: Response = None,
     db: Session = Depends(get_db),
 ):
-    print(payload)
-    # Accept email+password (reuse RegisterRequest fields)
+    # form_data.username is the email address (OAuth2 standard field name)
     user = db.query(User).filter(
-        User.email == payload.email.lower(),
+        User.email == form_data.username.lower(),
         User.deleted_at == None,
     ).first()
 
@@ -142,19 +137,18 @@ async def login(
     if user.is_blocked:
         raise HTTPException(status_code=403, detail="Account is blocked. Contact support.")
     if user.email_verified == 0:
-        # Email not verified - resend OTP
+        # Email not verified — resend OTP and tell frontend to redirect
         _generate_and_send_otp(
             user_id=user.id,
             email=user.email,
             first_name=user.first_name,
             db=db
         )
-
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, 
+            status_code=status.HTTP_403_FORBIDDEN,
             detail="email_not_verified"
-        ) 
-    if not verify_password(payload.password, user.password_hash):
+        )
+    if not verify_password(form_data.password, user.password_hash):
         raise HTTPException(status_code=401, detail="Invalid email or password.")
 
     user.last_login_at = datetime.now(timezone.utc)
@@ -229,6 +223,7 @@ async def logout(request: Request, response: Response, db: Session = Depends(get
 
 @router.post("/forgot-password")
 async def forgot_password(payload: ForgotPasswordRequest, db: Session = Depends(get_db)):
+    print(payload)
     user = db.query(User).filter(User.email == payload.email.lower()).first()
     if user:
         token = generate_verification_token()
