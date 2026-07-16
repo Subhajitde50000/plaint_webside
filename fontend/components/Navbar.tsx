@@ -3,6 +3,8 @@
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
+import { useMe } from "@/features/profile";
+import { useAuthStore } from "@/store/auth.store";
 
 /* ── Icons ── */
 function LeafLogo() {
@@ -135,6 +137,18 @@ interface SharedNavbarProps {
 export default function SharedNavbar({ cartCount = 0 }: SharedNavbarProps) {
   const pathname = usePathname();
   const router = useRouter();
+  const { isAuthenticated, setUser } = useAuthStore();
+  const { profile } = useMe();
+
+  useEffect(() => {
+    if (profile) {
+      setUser(profile);
+      if (!isAuthenticated) {
+        useAuthStore.setState({ isAuthenticated: true });
+      }
+    }
+  }, [profile, isAuthenticated, setUser]);
+
   const [scrolled,    setScrolled]    = useState(false);
   const [menuOpen,    setMenuOpen]    = useState(false);
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
@@ -144,6 +158,16 @@ export default function SharedNavbar({ cartCount = 0 }: SharedNavbarProps) {
   const [mobileSearchVal, setMobileSearchVal] = useState("");
   const [searchHistory, setSearchHistory] = useState<string[]>([]);
   const mobileSearchInputRef = useRef<HTMLInputElement>(null);
+
+  // Handle profile icon click
+  const handleProfileClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    if (!isAuthenticated) {
+      router.push("/login?returnTo=/profile");
+    } else {
+      router.push("/profile");
+    }
+  };
 
   // Open search overlay on event (e.g. from the Search page input)
   useEffect(() => {
@@ -608,12 +632,17 @@ export default function SharedNavbar({ cartCount = 0 }: SharedNavbarProps) {
             ><SearchIcon /></button>
           </div>
 
-          {/* User */}
-          <Link href="/profile" aria-label="Account"
+          {/* User - Navigate to profile or login */}
+          <Link
+            href="/login?returnTo=/profile"
+            aria-label="Account"
+            onClick={handleProfileClick}
             style={{ width: "38px", height: "38px", borderRadius: "50px", border: "none", background: "transparent", cursor: "pointer", color: "#1c1c1c", display: "flex", alignItems: "center", justifyContent: "center", transition: "background 200ms" }}
             onMouseEnter={(e) => ((e.currentTarget as HTMLAnchorElement).style.background = "rgba(0,181,102,0.08)")}
             onMouseLeave={(e) => ((e.currentTarget as HTMLAnchorElement).style.background = "transparent")}
-          ><UserIcon /></Link>
+          >
+            <UserIcon />
+          </Link>
 
           {/* Cart */}
           <Link href="/cart" aria-label={`Cart, ${cartCount} item${cartCount !== 1 ? "s" : ""}`}
@@ -666,6 +695,15 @@ export default function SharedNavbar({ cartCount = 0 }: SharedNavbarProps) {
             )}
           </div>
           <span>Cart</span>
+        </Link>
+        <Link
+          href="/login?returnTo=/profile"
+          onClick={handleProfileClick}
+          className={`snav-bottom-item ${pathname === "/profile" ? "active" : ""}`}
+          style={{ background: "none", border: "none", cursor: "pointer", padding: 0 }}
+        >
+          <UserIcon />
+          <span>Profile</span>
         </Link>
       </div>
 
