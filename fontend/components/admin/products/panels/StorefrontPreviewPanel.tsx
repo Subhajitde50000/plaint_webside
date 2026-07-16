@@ -141,7 +141,7 @@ export function StorefrontPreviewPanel({ data, isNew }: Props) {
       <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
         {[
           { label: 'Preview PDP →', href: slug ? `/products/${slug}` : '#' },
-          { label: 'Preview PLP Card', href: slug ? `/collections/plants` : '#' },
+          { label: 'Preview PLP Card', href: slug ? `/categories/plants` : '#' },
         ].map(({ label, href }) => (
           <a
             key={label}

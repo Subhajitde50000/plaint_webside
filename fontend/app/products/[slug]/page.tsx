@@ -1,8 +1,10 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, use, useMemo } from "react";
 import Link from "next/link";
 import SharedNavbar from "@/components/Navbar";
+import { useProduct } from "@/features/products/hooks/useProduct";
+import { useProducts } from "@/features/products/hooks/useProducts";
 
 /* ═══════════════════════════════════════════════════
    SVG ICONS
@@ -122,6 +124,20 @@ function CartIcon() {
 /* ═══════════════════════════════════════════════════
    DATA
 ═══════════════════════════════════════════════════ */
+const MOCK_REVIEWS = [
+  { initials: "AK", name: "Ananya K.", location: "Mumbai", date: "Mar 2026", rating: 5, verified: true, text: "Absolutely love this product! It arrived in perfect condition, well-packed. The quality is exceptional." },
+  { initials: "RS", name: "Rahul S.", location: "Bangalore", date: "Feb 2026", rating: 5, verified: true, text: "Best purchase I've made. The size was a great choice. Genuinely helpful and beautiful!" },
+  { initials: "PJ", name: "Priya J.", location: "Delhi", date: "Jan 2026", rating: 4, verified: true, text: "Beautiful product and very high quality on arrival. Overall great experience." },
+  { initials: "VM", name: "Vikram M.", location: "Chennai", date: "Dec 2025", rating: 5, verified: true, text: "Exceeded expectations. The product is huge for the price. Will definitely buy again." },
+];
+
+const MOCK_RELATED_PRODUCTS = [
+  { name: "Snake Plant", type: "Sansevieria trifasciata", price: 799, emoji: "🌵", color: "#C8DFC0", slug: "snake-plant" },
+  { name: "Peace Lily", type: "Spathiphyllum", price: 949, emoji: "🌸", color: "#F0D8E8" , slug: "peace-lily" },
+  { name: "Fiddle Leaf Fig", type: "Ficus lyrata", price: 1599, emoji: "🌳", color: "#D4E8CE", slug: "fiddle-leaf-fig" },
+  { name: "ZZ Plant", type: "Zamioculcas", price: 699, emoji: "🌿", color: "#DFF0D8", slug: "zz-plant" },
+];
+
 const PRODUCT = {
   slug: "monstera-deliciosa",
   name: "Monstera Deliciosa",
@@ -183,18 +199,8 @@ const PRODUCT = {
     { title: "Repotting", icon: "🪴", level: 2, desc: "Repot every 1–2 years when roots poke out of drainage holes. Use well-draining potting mix." },
     { title: "Pruning", icon: "✂️", level: 1, desc: "Trim yellowing or damaged leaves at the base with clean scissors. Light pruning promotes bushier growth." },
   ],
-  reviews: [
-    { initials: "AK", name: "Ananya K.", location: "Mumbai", date: "Mar 2026", rating: 5, verified: true, text: "Absolutely love this plant! It arrived in perfect condition, well-packed. The leaves are huge and healthy. My living room has been transformed completely." },
-    { initials: "RS", name: "Rahul S.", location: "Bangalore", date: "Feb 2026", rating: 5, verified: true, text: "Best plant purchase I've made. The medium size was a great choice — it's grown so fast already. The AI care reminders are genuinely helpful too!" },
-    { initials: "PJ", name: "Priya J.", location: "Delhi", date: "Jan 2026", rating: 4, verified: true, text: "Beautiful plant and very healthy on arrival. Slight leaf damage on one stem but Hero's support team was helpful. Docking 1 star for packing but overall great experience." },
-    { initials: "VM", name: "Vikram M.", location: "Chennai", date: "Dec 2025", rating: 5, verified: true, text: "Exceeded expectations. The plant was huge for the price, soil was moist and perfect. Already putting out a new leaf after 2 weeks. Will definitely buy again." },
-  ],
-  relatedProducts: [
-    { name: "Snake Plant", type: "Sansevieria trifasciata", price: 799, emoji: "🌵", color: "#C8DFC0", slug: "snake-plant" },
-    { name: "Peace Lily", type: "Spathiphyllum", price: 949, emoji: "🌸", color: "#F0D8E8" , slug: "peace-lily" },
-    { name: "Fiddle Leaf Fig", type: "Ficus lyrata", price: 1599, emoji: "🌳", color: "#D4E8CE", slug: "fiddle-leaf-fig" },
-    { name: "ZZ Plant", type: "Zamioculcas", price: 699, emoji: "🌿", color: "#DFF0D8", slug: "zz-plant" },
-  ],
+  reviews: MOCK_REVIEWS,
+  relatedProducts: MOCK_RELATED_PRODUCTS,
 };
 
 /* ═══════════════════════════════════════════════════
@@ -217,8 +223,9 @@ function Toast({ message, visible }: { message: string; visible: boolean }) {
 
 /* ═══════════════════════════════════════════════════
    IMAGE GALLERY
-═══════════════════════════════════════════════════ */
-function ImageGallery({ images }: { images: typeof PRODUCT.images }) {
+   Renders real image URLs using <img> tags with dynamic fallback.
+   ═══════════════════════════════════════════════════ */
+function ImageGallery({ images }: { images: { label: string; url?: string; emoji?: string; color: string }[] }) {
   const [active, setActive] = useState(0);
   const [fading, setFading] = useState(false);
 
@@ -227,6 +234,8 @@ function ImageGallery({ images }: { images: typeof PRODUCT.images }) {
     setFading(true);
     setTimeout(() => { setActive(idx); setFading(false); }, 200);
   };
+
+  const currentImage = images[active] || images[0];
 
   return (
     <div className="pdp-gallery-sticky">
@@ -239,23 +248,42 @@ function ImageGallery({ images }: { images: typeof PRODUCT.images }) {
         {/* Blob */}
         <div style={{
           position: "absolute", width: "320px", height: "320px", borderRadius: "50%",
-          background: images[active].color, opacity: 0.6, top: "50%", left: "50%",
+          background: currentImage?.color || "#D4E8CE", opacity: 0.6, top: "50%", left: "50%",
           transform: "translate(-50%,-50%)", transition: "background 0.4s ease",
         }} />
 
-        {/* Plant image placeholder */}
+        {/* Plant image */}
         <div style={{
           position: "relative", zIndex: 1,
           animation: "floatPlant 3s ease-in-out infinite",
           opacity: fading ? 0 : 1,
           transition: "opacity 0.2s ease",
           textAlign: "center",
+          width: "100%",
+          height: "100%",
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "center",
+          padding: "24px",
         }}>
-          <span style={{ fontSize: "180px", lineHeight: 1, display: "block" }}>{images[active].emoji}</span>
+          {currentImage?.url ? (
+            <img
+              src={currentImage.url}
+              alt={currentImage.label}
+              style={{
+                maxWidth: "85%",
+                maxHeight: "85%",
+                objectFit: "contain",
+              }}
+            />
+          ) : (
+            <span style={{ fontSize: "180px", lineHeight: 1, display: "block" }}>{currentImage?.emoji}</span>
+          )}
           <p style={{
             fontFamily: "DM Sans, sans-serif", fontSize: "13px",
             color: "var(--color-text-secondary)", marginTop: "8px",
-          }}>{images[active].label}</p>
+          }}>{currentImage?.label}</p>
         </div>
 
         {/* Badge Organic */}
@@ -287,11 +315,19 @@ function ImageGallery({ images }: { images: typeof PRODUCT.images }) {
               borderRadius: "var(--radius-md)", aspectRatio: "1/1", cursor: "pointer",
               display: "flex", alignItems: "center", justifyContent: "center",
               boxShadow: "var(--shadow-card)", transition: "border-color 0.2s, transform 0.2s",
-              fontSize: "28px",
               transform: active === idx ? "scale(1.04)" : "scale(1)",
+              padding: 4,
             }}
           >
-            {img.emoji}
+            {img.url ? (
+              <img
+                src={img.url}
+                alt={img.label}
+                style={{ width: "90%", height: "90%", objectFit: "contain" }}
+              />
+            ) : (
+              <span style={{ fontSize: "28px" }}>{img.emoji}</span>
+            )}
           </button>
         ))}
       </div>
@@ -325,17 +361,33 @@ function StarBar({ count, total, pct }: { count: number; total: number; pct: num
 /* ═══════════════════════════════════════════════════
    MAIN PAGE
 ═══════════════════════════════════════════════════ */
-export default function ProductDetailPage() {
-  const p = PRODUCT;
+interface PageProps {
+  params: Promise<{ slug: string }>;
+}
+
+export default function ProductDetailPage({ params }: PageProps) {
+  const { slug } = use(params);
+  const { data: product, isLoading, isError } = useProduct(slug);
+
+  // Fetch related products dynamically
+  const { data: relatedData } = useProducts({
+    productType: product?.product_type || undefined,
+    pageSize: 4,
+  });
 
   const [cartCount, setCartCount] = useState(2);
   const [qty, setQty] = useState(1);
-  const [selectedSize, setSelectedSize] = useState(1); // default: Medium
+  const [selectedSize, setSelectedSize] = useState(0); // default to first variant
   const [wishlisted, setWishlisted] = useState(false);
   const [activeTab, setActiveTab] = useState<"about" | "care" | "reviews">("about");
   const [toastVisible, setToastVisible] = useState(false);
   const [toastMsg, setToastMsg] = useState("Added to cart!");
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Reset selected size when product changes
+  useEffect(() => {
+    setSelectedSize(0);
+  }, [product]);
 
   const showToast = (msg: string) => {
     setToastMsg(msg);
@@ -344,14 +396,141 @@ export default function ProductDetailPage() {
     toastTimer.current = setTimeout(() => setToastVisible(false), 2500);
   };
 
+  // Map real product data to layout expected fields
+  const p = useMemo(() => {
+    if (!product) return null;
+
+    const basePrice = Number(product.base_price);
+    const compareAt = product.compare_at_price != null ? Number(product.compare_at_price) : null;
+    const discount = compareAt && compareAt > basePrice
+      ? Math.round(((compareAt - basePrice) / compareAt) * 100)
+      : 0;
+
+    const sizes = product.variants?.length > 0
+      ? product.variants.map((v) => ({
+          name: v.option_name,
+          height: v.option_detail || "Standard size",
+          bestFor: v.best_for || "Most popular pick",
+          potDia: v.pot_diameter || "N/A",
+          dispatch: v.dispatch_time || "1–2 days",
+          price: Number(v.price),
+          originalPrice: v.compare_at_price ? Number(v.compare_at_price) : null,
+          discount: v.compare_at_price && Number(v.compare_at_price) > Number(v.price)
+            ? Math.round(((Number(v.compare_at_price) - Number(v.price)) / Number(v.compare_at_price)) * 100)
+            : 0
+        }))
+      : [
+          { name: "Standard", height: "Standard size", bestFor: "Most popular pick", potDia: "N/A", dispatch: "1–2 days", price: basePrice, originalPrice: compareAt, discount }
+        ];
+
+    // Image mapping
+    const sortedImages = [...product.images].sort((a, b) => a.position - b.position);
+    const images = sortedImages.length > 0
+      ? sortedImages.map((img) => ({
+          label: img.alt_text || "Product view",
+          url: img.url,
+          color: "#D4E8CE"
+        }))
+      : [
+          { label: "Product view", url: "/placeholder-plant.jpg", color: "#D4E8CE" }
+        ];
+
+    // Care guide cards mapping
+    const careGuide = product.care_cards?.length > 0
+      ? product.care_cards.map((c) => ({
+          title: c.title,
+          icon: c.icon || "🌿",
+          level: c.difficulty_level,
+          desc: c.value + (c.detail ? ` — ${c.detail}` : "")
+        }))
+      : [
+          { title: "Light", icon: "☀️", level: 3, desc: product.care_light || "Indirect bright sunlight is best." },
+          { title: "Watering", icon: "💧", level: 2, desc: product.care_water || "Water when top soil feels dry." }
+        ];
+
+    // Specs mapping
+    const specs = product.specifications?.length > 0
+      ? product.specifications.map((s) => ({ label: s.label, value: s.value }))
+      : [
+          { label: "Botanical Name", value: product.botanical_name || "N/A" },
+          { label: "Common Name", value: product.common_name || "N/A" },
+          { label: "Pet Friendly", value: product.is_pet_friendly ? "Yes" : "No" },
+          { label: "Air Purifying", value: product.is_air_purifying ? "Yes" : "No" },
+          { label: "Care Skill", value: product.care_skill || "Beginner" }
+        ];
+
+    // Features mapping
+    const features = product.features?.length > 0
+      ? product.features.map((f) => f.feature)
+      : [
+          "Air-purifying qualities to clean indoor spaces",
+          "Thrives under moderate indirect light",
+          "Low-maintenance and easy to grow",
+        ];
+
+    // Care quick chips
+    const care = [
+      { icon: "☀️", label: "Light", value: product.care_light || "Indirect" },
+      { icon: "💧", label: "Water", value: product.care_water || "Weekly" },
+      { icon: "🌡️", label: "Temp", value: product.care_temperature || "18–27°C" },
+      { icon: "🌬️", label: "Skill", value: product.care_skill || "Beginner" }
+    ];
+
+    // Pots upsells
+    const pots = product.pot_upsells?.length > 0
+      ? product.pot_upsells.map((pu) => ({
+          name: pu.pot_product.title,
+          price: Number(pu.pot_product.base_price),
+          icon: "🏺",
+          slug: pu.pot_product.slug
+        }))
+      : [
+          { name: "Terracotta Pot", price: 349, icon: "🏺", slug: "terracotta-pot" },
+          { name: "White Ceramic Pot", price: 499, icon: "🫙", slug: "white-ceramic-pot" }
+        ];
+
+    // Related products
+    const related = (relatedData?.items ?? []).map((item) => ({
+      name: item.title,
+      type: item.short_description || "",
+      price: Number(item.base_price),
+      emoji: "🌿",
+      color: "#D4E8CE",
+      slug: item.slug
+    }));
+
+    return {
+      slug: product.slug,
+      name: product.title,
+      tagline: product.botanical_name || product.common_name || product.short_description || "",
+      categories: [product.product_type],
+      rating: Number(product.rating_average),
+      reviewCount: product.rating_count,
+      verified: product.rating_count > 0,
+      price: basePrice,
+      originalPrice: compareAt,
+      discount,
+      taxNote: product.price_note || "Inclusive of all taxes",
+      description: product.description || "",
+      features,
+      specs,
+      care,
+      sizes,
+      images,
+      pots,
+      careGuide,
+      reviews: MOCK_REVIEWS,
+      relatedProducts: related.length > 0 ? related : MOCK_RELATED_PRODUCTS
+    };
+  }, [product, relatedData]);
+
   const handleAddToCart = () => {
+    if (!p) return;
     setCartCount((c) => c + qty);
     showToast(`${qty}× ${p.name} added to cart!`);
   };
 
-  const size = p.sizes[selectedSize];
-
-  // Scroll-in for sections
+  // Scroll-in for sections — must be declared before any early return
   const aiRef = useRef<HTMLDivElement>(null);
   const [aiVisible, setAiVisible] = useState(false);
   useEffect(() => {
@@ -359,6 +538,35 @@ export default function ProductDetailPage() {
     if (aiRef.current) obs.observe(aiRef.current);
     return () => obs.disconnect();
   }, []);
+
+  if (isLoading) {
+    return (
+      <>
+        <SharedNavbar cartCount={cartCount} />
+        <div style={{ display: "flex", justifyContent: "center", alignItems: "center", minHeight: "100vh", fontFamily: "Poppins, sans-serif", fontSize: 16 }}>
+          Loading product details...
+        </div>
+      </>
+    );
+  }
+
+  if (isError || !p) {
+    return (
+      <>
+        <SharedNavbar cartCount={cartCount} />
+        <div style={{ display: "flex", flexDirection: "column", justifyContent: "center", alignItems: "center", minHeight: "100vh", fontFamily: "Poppins, sans-serif", gap: 16 }}>
+          <h1 style={{ fontSize: 24, fontWeight: 700, color: "var(--color-green-dark)" }}>Product Not Found</h1>
+          <p style={{ color: "var(--color-text-secondary)" }}>The product you are looking for does not exist or has been removed.</p>
+          <Link href="/categories/plants" className="btn-primary" style={{ textDecoration: "none" }}>Back to Shop</Link>
+        </div>
+      </>
+    );
+  }
+
+  const size = p.sizes[selectedSize] || p.sizes[0];
+  const activePrice = size?.price ?? p.price;
+  const activeOriginalPrice = size?.originalPrice ?? p.originalPrice;
+  const activeDiscount = size?.discount ?? p.discount;
 
   return (
     <>
@@ -536,7 +744,7 @@ export default function ProductDetailPage() {
         <nav className="pdp-breadcrumb" aria-label="Breadcrumb">
           <Link href="/">Home</Link>
           <span className="pdp-breadcrumb-sep">›</span>
-          <Link href="/collections/plants">Indoor Plants</Link>
+          <Link href="/categories/plants">Indoor Plants</Link>
           <span className="pdp-breadcrumb-sep">›</span>
           <span className="pdp-breadcrumb-current">{p.name}</span>
         </nav>
@@ -611,16 +819,20 @@ export default function ProductDetailPage() {
             <div style={{ marginBottom: "20px" }}>
               <div style={{ display: "flex", alignItems: "center", gap: "14px", flexWrap: "wrap" }}>
                 <span style={{ fontFamily: "Poppins, sans-serif", fontWeight: 700, fontSize: "clamp(26px,3vw,34px)", color: "var(--color-green-dark)" }}>
-                  ₹{p.price.toLocaleString("en-IN")}
+                  ₹{activePrice.toLocaleString("en-IN")}
                 </span>
-                <span style={{ fontFamily: "Poppins, sans-serif", fontSize: "18px", color: "var(--color-text-secondary)", textDecoration: "line-through" }}>
-                  ₹{p.originalPrice.toLocaleString("en-IN")}
-                </span>
-                <span style={{
-                  background: "#fff0c2", color: "#8a6200",
-                  fontFamily: "Poppins, sans-serif", fontWeight: 600, fontSize: "12px",
-                  padding: "4px 10px", borderRadius: "var(--radius-full)",
-                }}>{p.discount}% OFF</span>
+                {activeOriginalPrice && activeOriginalPrice > activePrice && (
+                  <span style={{ fontFamily: "Poppins, sans-serif", fontSize: "18px", color: "var(--color-text-secondary)", textDecoration: "line-through" }}>
+                    ₹{activeOriginalPrice.toLocaleString("en-IN")}
+                  </span>
+                )}
+                {activeDiscount > 0 && (
+                  <span style={{
+                    background: "#fff0c2", color: "#8a6200",
+                    fontFamily: "Poppins, sans-serif", fontWeight: 600, fontSize: "12px",
+                    padding: "4px 10px", borderRadius: "var(--radius-full)",
+                  }}>{activeDiscount}% OFF</span>
+                )}
               </div>
               <p style={{ fontFamily: "DM Sans, sans-serif", fontSize: "12px", color: "var(--color-text-secondary)", marginTop: "4px" }}>
                 {p.taxNote}
@@ -699,7 +911,7 @@ export default function ProductDetailPage() {
                 {p.pots.map((pot) => (
                   <Link
                     key={pot.name}
-                    href={`/products/${pot.name.toLowerCase().replace(/ /g, "-")}`}
+                    href={`/products/${pot.slug}`}
                     style={{
                       display: "flex", alignItems: "center", gap: "8px",
                       background: "white", border: "1.5px solid rgba(45,90,39,0.15)",
@@ -718,7 +930,7 @@ export default function ProductDetailPage() {
                   </Link>
                 ))}
                 <Link
-                  href="/collections/pots"
+                  href="/categories/pots"
                   style={{
                     display: "flex", alignItems: "center", gap: "6px",
                     background: "white", border: "1.5px solid rgba(45,90,39,0.15)",

@@ -87,6 +87,16 @@ class ProductListResponse(BaseModel):
     pages: int
 
 
+class PotUpsellSchema(BaseModel):
+    id: int
+    plant_product_id: int
+    pot_product_id: int
+    sort_order: int
+    pot_product: ProductListItem
+
+    model_config = {"from_attributes": True}
+
+
 class ProductDetailResponse(BaseModel):
     id: int
     uuid: str
@@ -124,6 +134,7 @@ class ProductDetailResponse(BaseModel):
     care_cards: List[CareCardSchema] = []
     features: List[FeatureSchema] = []
     specifications: List[SpecificationSchema] = []
+    pot_upsells: List[PotUpsellSchema] = []
 
     model_config = {"from_attributes": True}
 

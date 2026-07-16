@@ -5,13 +5,15 @@ import { CATEGORY_PILLS } from "@/lib/plp-data";
 import type { PlantTag } from "@/lib/plp-data";
 
 interface PlpCategoryPillsProps {
-  selected: PlantTag | "all";
-  onChange: (tag: PlantTag | "all") => void;
+  selected: string;
+  onChange: (tag: any) => void;
+  pills?: { label: string; tag: string }[];
 }
 
 export default function PlpCategoryPills({
   selected,
   onChange,
+  pills,
 }: PlpCategoryPillsProps) {
   const rowRef = useRef<HTMLDivElement>(null);
 
@@ -57,7 +59,7 @@ export default function PlpCategoryPills({
           borderBottom: "1px solid rgba(28,28,28,0.10)",
         }}
       >
-        {CATEGORY_PILLS.map((pill, idx) => {
+        {(pills || CATEGORY_PILLS).map((pill, idx) => {
           const isActive = selected === pill.tag;
           return (
             <button

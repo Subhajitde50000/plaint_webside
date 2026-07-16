@@ -666,7 +666,7 @@ export default function SharedNavbar({ cartCount = 0 }: SharedNavbarProps) {
           <HomeIcon />
           <span>Home</span>
         </Link>
-        <Link href="/collections/plants" className={`snav-bottom-item ${pathname === "/collections/plants" ? "active" : ""}`}>
+        <Link href="/categories/plants" className={`snav-bottom-item ${pathname === "/categories/plants" ? "active" : ""}`}>
           <PlantIcon />
           <span>Plants</span>
         </Link>
