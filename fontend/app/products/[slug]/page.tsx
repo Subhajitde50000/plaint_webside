@@ -5,6 +5,7 @@ import Link from "next/link";
 import SharedNavbar from "@/components/Navbar";
 import { useProduct } from "@/features/products/hooks/useProduct";
 import { useProducts } from "@/features/products/hooks/useProducts";
+import { useCart } from "@/features/cart/hooks/useCart";
 
 /* ═══════════════════════════════════════════════════
    SVG ICONS
@@ -132,10 +133,10 @@ const MOCK_REVIEWS = [
 ];
 
 const MOCK_RELATED_PRODUCTS = [
-  { name: "Snake Plant", type: "Sansevieria trifasciata", price: 799, emoji: "🌵", color: "#C8DFC0", slug: "snake-plant" },
-  { name: "Peace Lily", type: "Spathiphyllum", price: 949, emoji: "🌸", color: "#F0D8E8" , slug: "peace-lily" },
-  { name: "Fiddle Leaf Fig", type: "Ficus lyrata", price: 1599, emoji: "🌳", color: "#D4E8CE", slug: "fiddle-leaf-fig" },
-  { name: "ZZ Plant", type: "Zamioculcas", price: 699, emoji: "🌿", color: "#DFF0D8", slug: "zz-plant" },
+  { name: "Snake Plant", type: "Sansevieria trifasciata", price: 799, emoji: "🌵", color: "#C8DFC0", slug: "snake-plant", firstVariantId: null as string | null },
+  { name: "Peace Lily", type: "Spathiphyllum", price: 949, emoji: "🌸", color: "#F0D8E8" , slug: "peace-lily", firstVariantId: null as string | null },
+  { name: "Fiddle Leaf Fig", type: "Ficus lyrata", price: 1599, emoji: "🌳", color: "#D4E8CE", slug: "fiddle-leaf-fig", firstVariantId: null as string | null },
+  { name: "ZZ Plant", type: "Zamioculcas", price: 699, emoji: "🌿", color: "#DFF0D8", slug: "zz-plant", firstVariantId: null as string | null },
 ];
 
 const PRODUCT = {
@@ -375,7 +376,7 @@ export default function ProductDetailPage({ params }: PageProps) {
     pageSize: 4,
   });
 
-  const [cartCount, setCartCount] = useState(2);
+  const { addItem, isAddingItem } = useCart();
   const [qty, setQty] = useState(1);
   const [selectedSize, setSelectedSize] = useState(0); // default to first variant
   const [wishlisted, setWishlisted] = useState(false);
@@ -496,7 +497,8 @@ export default function ProductDetailPage({ params }: PageProps) {
       price: Number(item.base_price),
       emoji: "🌿",
       color: "#D4E8CE",
-      slug: item.slug
+      slug: item.slug,
+      firstVariantId: item.variants?.[0]?.id ? String(item.variants[0].id) : null
     }));
 
     return {
@@ -525,9 +527,24 @@ export default function ProductDetailPage({ params }: PageProps) {
   }, [product, relatedData]);
 
   const handleAddToCart = () => {
-    if (!p) return;
-    setCartCount((c) => c + qty);
-    showToast(`${qty}× ${p.name} added to cart!`);
+    if (!p || !product) return;
+    const variant = product.variants?.[selectedSize];
+    if (!variant) {
+      showToast("Selected size/variant is not available.");
+      return;
+    }
+    addItem(
+      { variantId: String(variant.id), quantity: qty },
+      {
+        onSuccess: () => {
+          showToast(`${qty}× ${p.name} added to cart!`);
+        },
+        onError: (err: any) => {
+          const detail = err?.response?.data?.detail || "Could not add item to cart. Please log in first.";
+          showToast(detail);
+        }
+      }
+    );
   };
 
   // Scroll-in for sections — must be declared before any early return
@@ -542,7 +559,7 @@ export default function ProductDetailPage({ params }: PageProps) {
   if (isLoading) {
     return (
       <>
-        <SharedNavbar cartCount={cartCount} />
+        <SharedNavbar />
         <div style={{ display: "flex", justifyContent: "center", alignItems: "center", minHeight: "100vh", fontFamily: "Poppins, sans-serif", fontSize: 16 }}>
           Loading product details...
         </div>
@@ -553,7 +570,7 @@ export default function ProductDetailPage({ params }: PageProps) {
   if (isError || !p) {
     return (
       <>
-        <SharedNavbar cartCount={cartCount} />
+        <SharedNavbar />
         <div style={{ display: "flex", flexDirection: "column", justifyContent: "center", alignItems: "center", minHeight: "100vh", fontFamily: "Poppins, sans-serif", gap: 16 }}>
           <h1 style={{ fontSize: 24, fontWeight: 700, color: "var(--color-green-dark)" }}>Product Not Found</h1>
           <p style={{ color: "var(--color-text-secondary)" }}>The product you are looking for does not exist or has been removed.</p>
@@ -570,7 +587,7 @@ export default function ProductDetailPage({ params }: PageProps) {
 
   return (
     <>
-      <SharedNavbar cartCount={cartCount} />
+      <SharedNavbar />
 
       <style>{`
         /* PDP page styles */
@@ -1029,10 +1046,12 @@ export default function ProductDetailPage({ params }: PageProps) {
               <button
                 id="add-to-cart-btn"
                 onClick={handleAddToCart}
+                disabled={isAddingItem}
+                aria-busy={isAddingItem}
                 className="btn-primary"
-                style={{ width: "100%", justifyContent: "center", fontSize: "16px", padding: "16px 32px" }}
+                style={{ width: "100%", justifyContent: "center", fontSize: "16px", padding: "16px 32px", opacity: isAddingItem ? 0.7 : 1 }}
               >
-                <CartIcon /> Add to Cart
+                <CartIcon /> {isAddingItem ? "Adding to Cart..." : "Add to Cart"}
               </button>
               <Link
                 href="/checkout"
@@ -1324,7 +1343,25 @@ export default function ProductDetailPage({ params }: PageProps) {
                   }}>
                     {prod.emoji}
                     <button
-                      onClick={(e) => { e.preventDefault(); showToast(`${prod.name} added to cart!`); setCartCount(c => c + 1); }}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        if (!prod.firstVariantId) {
+                          showToast("Product is currently unavailable.");
+                          return;
+                        }
+                        addItem(
+                          { variantId: prod.firstVariantId, quantity: 1 },
+                          {
+                            onSuccess: () => {
+                              showToast(`${prod.name} added to cart!`);
+                            },
+                            onError: (err: any) => {
+                              const detail = err?.response?.data?.detail || "Could not add item to cart. Please log in first.";
+                              showToast(detail);
+                            }
+                          }
+                        );
+                      }}
                       style={{
                         position: "absolute", bottom: "12px", right: "12px",
                         width: "32px", height: "32px", borderRadius: "50%",
