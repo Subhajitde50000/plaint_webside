@@ -5,6 +5,7 @@ import Link from "next/link";
 import SharedNavbar from "@/components/Navbar";
 import { useCart } from "@/features/cart/hooks/useCart";
 import { useAuthStore } from "@/store/auth.store";
+import { useCheckoutStore } from "@/store/checkout.store";
 
 /* ── Design Tokens ─────────────────────────────────────── */
 const T = {
@@ -512,7 +513,7 @@ export default function CartPage() {
 
                 {/* Checkout buttons */}
                 <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-                  <Link href="/checkout" className="green-btn" style={{ justifyContent: "center", width: "100%", padding: "14px 28px", fontSize: 15, textDecoration: "none" }}>
+                  <Link href="/checkout" onClick={() => useCheckoutStore.getState().clearBuyNowItem()} className="green-btn" style={{ justifyContent: "center", width: "100%", padding: "14px 28px", fontSize: 15, textDecoration: "none" }}>
                     Proceed to Checkout
                   </Link>
                   

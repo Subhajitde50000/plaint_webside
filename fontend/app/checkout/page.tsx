@@ -4,6 +4,11 @@ import { useState, useEffect, useRef, Suspense } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import SharedNavbar from "@/components/Navbar";
+import { useCheckout } from "@/features/orders/hooks/useCheckout";
+import { useCart } from "@/features/cart/hooks/useCart";
+import { useAddresses, useAddAddress, useUpdateAddress } from "@/features/profile";
+import { useAuthStore } from "@/store/auth.store";
+import { useCheckoutStore } from "@/store/checkout.store";
 
 /* ── Design Tokens ─────────────────────────────────────── */
 const T = {
@@ -75,13 +80,40 @@ const SimulatedQRCode = () => (
 function CheckoutContent() {
   const searchParams = useSearchParams();
   const [step, setStep] = useState<"summary" | "payment" | "success">("summary");
+  const { placeOrder, isPlacing, error: checkoutError } = useCheckout();
+  const { cart } = useCart();
+  const { addresses: fetchedAddresses } = useAddresses();
+  const { addAddress } = useAddAddress();
+  const { updateAddress } = useUpdateAddress();
+  const { user } = useAuthStore();
+  const buyNowItem = useCheckoutStore((s) => s.buyNowItem);
 
-  // Saved Addresses State
-  const [savedAddresses, setSavedAddresses] = useState([
-    { id: 1, label: "Home (Kolkata)", fullName: "Subhajit Ghosh", address: "12/A Park Street", city: "Kolkata", state: "West Bengal", zip: "700016", phone: "+91 98765 43210", email: "subhajit@email.com" },
-    { id: 2, label: "Office (Bangalore)", fullName: "Subhajit Ghosh", address: "Tech Park Phase 2, Whitefield", city: "Bangalore", state: "Karnataka", zip: "560066", phone: "+91 98765 43210", email: "subhajit.work@email.com" },
-  ]);
-  const [selectedAddressId, setSelectedAddressId] = useState<number>(1);
+  // Local state fallback for guest or manually added addresses
+  const [customAddresses, setCustomAddresses] = useState<any[]>([]);
+
+  // Map real saved addresses from profile API or local additions
+  const savedAddresses = (fetchedAddresses && fetchedAddresses.length > 0)
+    ? fetchedAddresses.map((a: any) => ({
+        id: a.id,
+        label: a.label || (a.is_default ? "Default Address" : `Address #${a.id}`),
+        fullName: a.recipient_name || `${user?.first_name || ""} ${user?.last_name || ""}`.trim() || "Valued Customer",
+        address: [a.line1, a.line2].filter(Boolean).join(", "),
+        city: a.city,
+        state: a.state,
+        zip: a.pincode,
+        phone: a.phone || user?.phone || "",
+        email: user?.email || "",
+      }))
+    : customAddresses;
+
+  const [selectedAddressId, setSelectedAddressId] = useState<number>(0);
+
+  // Auto select first address when available
+  useEffect(() => {
+    if (savedAddresses.length > 0 && (!selectedAddressId || !savedAddresses.some(a => a.id === selectedAddressId))) {
+      setSelectedAddressId(savedAddresses[0].id);
+    }
+  }, [savedAddresses, selectedAddressId]);
 
   // Address Form States for Inline Add/Edit
   const [showAddressForm, setShowAddressForm] = useState(false);
@@ -119,12 +151,6 @@ function CheckoutContent() {
   // 5. COD Confirmation State
   const [codConfirmed, setCodConfirmed] = useState(false);
 
-  // Mock Saved Cards
-  const savedCards = [
-    { id: 1, label: "Visa ending in 4820", number: "4532 7812 9012 4820", name: "Subhajit Ghosh", expiry: "12/29", type: "visa" },
-    { id: 2, label: "Mastercard ending in 9851", number: "5412 8890 2314 9851", name: "Subhajit Ghosh", expiry: "06/28", type: "mastercard" },
-  ];
-
   // List of major Net Banking banks
   const popularBanks = [
     { id: "sbi", name: "State Bank of India", short: "SBI" },
@@ -141,50 +167,37 @@ function CheckoutContent() {
     { id: "axis-emi", name: "Axis Bank Credit Card", rates: { 3: 12, 6: 13.5, 12: 14 } },
   ];
 
-  // Items State (either single buyNow item or cart items)
+  // Items State (either single buyNow item or live cart items)
   const [items, setItems] = useState<CheckoutItem[]>([]);
   const [isBuyNow, setIsBuyNow] = useState(false);
 
   useEffect(() => {
-    const buyNowParam = searchParams.get("buyNow");
-    if (buyNowParam === "true") {
+    if (buyNowItem) {
       setIsBuyNow(true);
       setItems([
         {
-          name: searchParams.get("name") || "Red Anthurium Plant",
-          price: Number(searchParams.get("price")) || 25.00,
-          qty: Number(searchParams.get("qty")) || 1,
-          img: searchParams.get("img") || "/fern-small.png",
-          options: `${searchParams.get("size") || "Medium"} size · ${searchParams.get("pot") || "Normal"} Pot`,
+          name: buyNowItem.product_title,
+          price: buyNowItem.price,
+          qty: buyNowItem.quantity,
+          img: buyNowItem.image_url || "/placeholder-plant.jpg",
+          options: buyNowItem.options || buyNowItem.variant_title || "Standard size",
         }
       ]);
+    } else if (cart?.items) {
+      setIsBuyNow(false);
+      setItems(
+        cart.items.map((item: any) => ({
+          name: item.product_title || item.variant?.product?.title || "Product",
+          qty: item.quantity,
+          price: Number(item.price_at_add || item.variant?.price || 0),
+          img: item.image_url || item.variant?.product?.primary_image || "/placeholder-plant.jpg",
+          options: item.variant_title || item.variant?.title || "Standard size",
+        }))
+      );
     } else {
-      // Default checkout items (e.g. from local storage, or mock data)
-      setItems([
-        {
-          name: "Monstera Deliciosa",
-          qty: 1,
-          price: 25.00,
-          img: "/monstera.png",
-          options: "Medium size · White Ceramic Pot",
-        },
-        {
-          name: "Wildflower Seeds Mix",
-          qty: 2,
-          price: 18.00,
-          img: "/cat-flowers.png",
-          options: "Pack of 3 · Premium Blend",
-        },
-        {
-          name: "Moisture Meter Pro",
-          qty: 1,
-          price: 15.00,
-          img: "/product-spray.png",
-          options: "Digital Probe · Battery Included",
-        }
-      ]);
+      setItems([]);
     }
-  }, [searchParams]);
+  }, [buyNowItem, cart]);
 
   // Find active address details
   const activeAddress = savedAddresses.find(a => a.id === selectedAddressId) || savedAddresses[0];
@@ -193,9 +206,9 @@ function CheckoutContent() {
   const openAddAddress = () => {
     setEditAddressId(null);
     setAddrLabel("");
-    setAddrFullName("");
-    setAddrEmail("");
-    setAddrPhone("");
+    setAddrFullName(`${user?.first_name || ""} ${user?.last_name || ""}`.trim());
+    setAddrEmail(user?.email || "");
+    setAddrPhone(user?.phone || "");
     setAddrAddress("");
     setAddrCity("");
     setAddrState("");
@@ -219,56 +232,68 @@ function CheckoutContent() {
 
   const handleAddressSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (editAddressId !== null) {
-      // Edit Address
-      setSavedAddresses(prev => prev.map(a => a.id === editAddressId ? {
-        id: editAddressId,
-        label: addrLabel || a.label,
-        fullName: addrFullName,
-        email: addrEmail,
-        phone: addrPhone,
-        address: addrAddress,
-        city: addrCity,
-        state: addrState,
-        zip: addrZip,
-      } : a));
-      setShowAddressForm(false);
-    } else {
-      // Add New Address
-      const newId = Math.max(...savedAddresses.map(a => a.id), 0) + 1;
-      const label = addrLabel || `Address ${newId}`;
-      const newAddr = {
-        id: newId,
-        label,
-        fullName: addrFullName,
-        email: addrEmail,
-        phone: addrPhone,
-        address: addrAddress,
-        city: addrCity,
-        state: addrState,
-        zip: addrZip,
-      };
-      setSavedAddresses(prev => [...prev, newAddr]);
-      setSelectedAddressId(newId);
-      setShowAddressForm(false);
-    }
-  };
+    const payload = {
+      label: addrLabel || "Delivery Address",
+      recipient_name: addrFullName,
+      phone: addrPhone,
+      line1: addrAddress,
+      city: addrCity,
+      state: addrState,
+      pincode: addrZip,
+      country: "India",
+    };
 
-  // Handle saved card selection
-  const selectSavedCard = (cardId: number) => {
-    const card = savedCards.find(c => c.id === cardId);
-    if (card) {
-      setSelectedSavedCard(cardId);
-      setCardName(card.name);
-      setCardNumber(card.number);
-      setCardExpiry(card.expiry);
-      setCardCvv("•••");
+    if (editAddressId !== null) {
+      updateAddress(
+        { id: editAddressId, payload },
+        {
+          onSuccess: () => setShowAddressForm(false),
+          onError: () => {
+            setCustomAddresses(prev => prev.map(a => a.id === editAddressId ? {
+              id: editAddressId,
+              label: addrLabel || a.label,
+              fullName: addrFullName,
+              email: addrEmail,
+              phone: addrPhone,
+              address: addrAddress,
+              city: addrCity,
+              state: addrState,
+              zip: addrZip,
+            } : a));
+            setShowAddressForm(false);
+          }
+        }
+      );
+    } else {
+      addAddress(payload, {
+        onSuccess: (newAddr: any) => {
+          if (newAddr?.id) setSelectedAddressId(newAddr.id);
+          setShowAddressForm(false);
+        },
+        onError: () => {
+          const newId = Math.max(...customAddresses.map(a => a.id), 0) + 1;
+          const newAddr = {
+            id: newId,
+            label: addrLabel || `Address ${newId}`,
+            fullName: addrFullName,
+            email: addrEmail,
+            phone: addrPhone,
+            address: addrAddress,
+            city: addrCity,
+            state: addrState,
+            zip: addrZip,
+          };
+          setCustomAddresses(prev => [...prev, newAddr]);
+          setSelectedAddressId(newId);
+          setShowAddressForm(false);
+        }
+      });
     }
   };
 
   // Calculations
   const subtotal = items.reduce((acc, item) => acc + item.price * item.qty, 0);
-  const shippingFee = subtotal >= 50 || items.length === 0 ? 0 : 5.00;
+  const shippingFee = subtotal >= 999 || items.length === 0 ? 0 : 99.00;
   const taxAmount = subtotal * 0.08;
   const total = subtotal + shippingFee + taxAmount;
   const orderNumber = useRef("");
@@ -312,10 +337,26 @@ function CheckoutContent() {
         return;
       }
     }
-    
-    // Generate order number
-    orderNumber.current = "#PB-" + Math.floor(1000 + Math.random() * 9000);
-    setStep("success");
+
+    // Call backend: create order → open Razorpay → verify → redirect to success
+    const orderPayload: any = {
+      addressId: String(selectedAddressId),
+    };
+
+    if (buyNowItem) {
+      orderPayload.buyNowVariantId = buyNowItem.variant_id;
+      orderPayload.buyNowQuantity = buyNowItem.quantity;
+    }
+
+    placeOrder(
+      orderPayload,
+      {
+        onError: (err: any) => {
+          const msg = err?.message ?? "Payment failed. Please try again.";
+          alert(msg);
+        },
+      }
+    );
   };
 
   // Format Card Number (auto space)
@@ -350,8 +391,6 @@ function CheckoutContent() {
     const cleanNumber = cardNumber.replace(/\s+/g, "");
     if (cleanNumber.startsWith("4")) return "visa";
     if (cleanNumber.startsWith("5")) return "mastercard";
-    const selected = savedCards.find(c => c.id === selectedSavedCard);
-    if (selected) return selected.type;
     return "generic";
   };
 
@@ -1149,18 +1188,6 @@ function CheckoutContent() {
                         </div>
                       </div>
 
-                      {/* Saved Card Selector Option */}
-                      <div style={{ marginBottom: "20px" }}>
-                        <p className="input-label" style={{ marginBottom: "8px" }}>Select a Saved Card</p>
-                        <div className="saved-cards-list">
-                          {savedCards.map(card => (
-                            <button key={card.id} type="button" className={`saved-card-option ${selectedSavedCard === card.id ? "active" : ""}`} onClick={() => selectSavedCard(card.id)}>
-                              💳 {card.label}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-
                       <div className="form-grid">
                         <div className="form-group full-width">
                           <label className="input-label">Cardholder Name</label>
@@ -1333,8 +1360,8 @@ function CheckoutContent() {
                     <button type="button" className="outline-btn" onClick={() => setStep("summary")}>
                       ← Back to Review
                     </button>
-                    <button type="submit" className="green-btn">
-                      Place Order (${total.toFixed(2)})
+                    <button type="submit" className="green-btn" disabled={isPlacing} style={{ opacity: isPlacing ? 0.7 : 1 }}>
+                      {isPlacing ? "Processing…" : `Place Order (₹${total.toFixed(2)})`}
                     </button>
                   </div>
                 </form>

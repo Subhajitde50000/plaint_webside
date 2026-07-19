@@ -586,7 +586,7 @@ export function useResetPassword() {
 
 | Property | Value |
 |---|---|
-| **Page file** | `src/app/(storefront)/plants/page.tsx` |
+| **Page file** | `src/app/categories/[slug]/page.tsx` |
 | **Hook** | `src/features/products/hooks/useProducts.ts` |
 | **API function** | `src/features/products/api/products.api.ts → getProductsApi()` |
 | **Endpoint** | `GET /api/v1/products/` |

@@ -15,6 +15,8 @@ from app.tasks.order_tasks import post_payment_tasks, release_inventory_on_cance
 from app.utils.pagination import paginate
 from datetime import datetime, timezone
 
+from app.config import settings
+
 router = APIRouter(prefix="/orders", tags=["Orders"])
 
 
@@ -24,9 +26,11 @@ async def create_order(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
+    print(payload)
     try:
         svc = OrderService(db)
         order = svc.create_order(user, payload)
+        print('..................1.............')
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -42,13 +46,14 @@ async def create_order(
     except Exception:
         # Return order without payment if Razorpay not configured (dev mode)
         rp_order = {"id": None, "key": None}
+    print('..................1.............')
 
     return {
         "order_uuid": order.uuid,
         "order_number": order.order_number,
         "total": str(order.total),
         "razorpay_order_id": order.razorpay_order_id,
-        "razorpay_key_id": PaymentService.__init__.__module__,
+        "razorpay_key_id": settings.RAZORPAY_KEY_ID,
     }
 
 

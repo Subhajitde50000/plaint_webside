@@ -2,10 +2,12 @@
 
 import { useState, useEffect, useRef, useCallback, use, useMemo } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import SharedNavbar from "@/components/Navbar";
 import { useProduct } from "@/features/products/hooks/useProduct";
 import { useProducts } from "@/features/products/hooks/useProducts";
 import { useCart } from "@/features/cart/hooks/useCart";
+import { useCheckoutStore } from "@/store/checkout.store";
 
 /* ═══════════════════════════════════════════════════
    SVG ICONS
@@ -368,6 +370,7 @@ interface PageProps {
 
 export default function ProductDetailPage({ params }: PageProps) {
   const { slug } = use(params);
+  const router = useRouter();
   const { data: product, isLoading, isError } = useProduct(slug);
 
   // Fetch related products dynamically
@@ -545,6 +548,27 @@ export default function ProductDetailPage({ params }: PageProps) {
         }
       }
     );
+  };
+
+  const handleBuyNow = () => {
+    if (!p || !product) return;
+    const variant = product.variants?.[selectedSize] || product.variants?.[0];
+    const variantId = variant?.id;
+    if (!variantId) {
+      showToast("Selected variant is not available.");
+      return;
+    }
+    useCheckoutStore.getState().setBuyNowItem({
+      product_uuid: product.uuid,
+      variant_id: variantId,
+      product_title: p.name,
+      variant_title: variant.option_name || `${p.sizes[selectedSize]?.name || "Standard"}`,
+      price: variant.price ? Number(variant.price) : p.price,
+      quantity: qty,
+      image_url: p.images[0]?.url || "/placeholder-plant.jpg",
+      options: `${p.sizes[selectedSize]?.name || "Standard"} size`,
+    });
+    router.push("/checkout");
   };
 
   // Scroll-in for sections — must be declared before any early return
@@ -1053,15 +1077,16 @@ export default function ProductDetailPage({ params }: PageProps) {
               >
                 <CartIcon /> {isAddingItem ? "Adding to Cart..." : "Add to Cart"}
               </button>
-              <Link
-                href="/checkout"
+              <button
+                type="button"
                 id="buy-now-btn"
+                onClick={handleBuyNow}
                 style={{
                   width: "100%", display: "flex", alignItems: "center", justifyContent: "center",
                   fontFamily: "Poppins, sans-serif", fontWeight: 600, fontSize: "16px",
                   padding: "14px 32px", borderRadius: "var(--radius-xl)",
                   border: "2px solid var(--color-green-dark)", color: "var(--color-green-dark)",
-                  background: "transparent", textDecoration: "none",
+                  background: "transparent", cursor: "pointer",
                   transition: "all 0.25s ease",
                 }}
                 onMouseEnter={(e) => {
@@ -1072,7 +1097,7 @@ export default function ProductDetailPage({ params }: PageProps) {
                 }}
               >
                 Buy Now
-              </Link>
+              </button>
             </div>
 
             {/* Delivery info */}

@@ -3,3 +3,10 @@
 3.  keep error on plant add 
 4.  ,any endpoint not page like prament, notification , secority
 5.  inpurt section proble after one type cant type on next time
+6.  http://localhost:3000/categories page not oprn problem
+
+7.  the product detels page are simple looginf add scliton base loding system
+8.  from Cart page cant go to the pdp page 
+9.  onluy pdp can crad not onather
+
+10. emal mot send
