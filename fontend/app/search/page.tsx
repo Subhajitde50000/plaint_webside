@@ -1,667 +1,560 @@
 "use client";
 
-import { useState, useEffect, useRef, Suspense } from "react";
+import { useState, useEffect, Suspense } from "react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter } from "next/navigation";
 import SharedNavbar from "@/components/Navbar";
+import { useSearch } from "@/features/search";
+import type { SearchProduct } from "@/features/search";
 
-/* ── Design Tokens ─────────────────────────────────────── */
+/* ── Design Tokens ────────────────────────────────────────────────────────── */
 const T = {
-  bg: "#fefcf9",
-  bgCard: "#FFFFFF",
-  bgSection: "#f7f5f0",
-  bgMuted: "#fbfaf7",
-  green: "#00b566",
-  greenMid: "#009952",
-  greenPale: "rgba(0, 181, 102, 0.12)",
-  greenLight: "rgba(0, 181, 102, 0.08)",
-  heading: "#1c1c1c",
-  body: "#333333",
-  muted: "#7c7c7c",
-  border: "rgba(0, 0, 0, 0.08)",
-  borderGreen: "rgba(0, 181, 102, 0.16)",
-  white: "#FFFFFF",
-  red: "#dc2626",
-  amber: "#d97706",
-  shadow: "0 4px 20px rgba(0,0,0,0.04)",
-  shadowHover: "0 8px 30px rgba(0, 181, 102, 0.08)",
-  shadowBtn: "0 4px 14px rgba(0, 181, 102, 0.25)",
+  bg:          "#fefcf9",
+  bgCard:      "#ffffff",
+  bgMuted:     "#f7f5f0",
+  green:       "#00b566",
+  greenMid:    "#009952",
+  greenPale:   "rgba(0,181,102,0.08)",
+  greenBorder: "rgba(0,181,102,0.18)",
+  heading:     "#1c1c1c",
+  body:        "#333333",
+  muted:       "#7c7c7c",
+  border:      "rgba(0,0,0,0.07)",
+  shadow:      "0 2px 12px rgba(0,0,0,0.04)",
+  shadowHover: "0 8px 28px rgba(0,181,102,0.10)",
+  radius:      "16px",
+  radiusSm:    "10px",
 };
 
-interface Product {
-  id: number;
-  name: string;
-  price: number;
-  rating: number;
-  category: "plants" | "seeds" | "tools";
-  img: string;
-  tags: string[];
-  slug: string;
-  description: string;
-}
-
-const PRODUCT_CATALOG: Product[] = [
-  {
-    id: 1,
-    name: "Red Anthurium Plant",
-    price: 25.00,
-    rating: 4.8,
-    category: "plants",
-    img: "/fern-small.png",
-    slug: "red-anthurium-plant",
-    tags: ["indoor", "flowers", "colorful", "red", "anthurium"],
-    description: "Elegant air-purifying plant with vibrant waxy red heart-shaped flowers blooming year-round."
-  },
-  {
-    id: 2,
-    name: "Monstera Deliciosa",
-    price: 35.00,
-    rating: 4.9,
-    category: "plants",
-    img: "/monstera.png",
-    slug: "monstera",
-    tags: ["indoor", "leafy", "green", "popular", "swiss cheese"],
-    description: "Famous for its iconic leaf fenestrations, perfect for adding a tropical vibe to spacious rooms."
-  },
-  {
-    id: 3,
-    name: "Indoor Snake Plant",
-    price: 32.00,
-    rating: 4.7,
-    category: "plants",
-    img: "/cat-indoor.png",
-    slug: "monstera",
-    tags: ["indoor", "low maintenance", "air purifying", "sansevieria"],
-    description: "Resilient upright foliage that thrives in low light and produces oxygen continuously overnight."
-  },
-  {
-    id: 4,
-    name: "Balcony Flowers Mix",
-    price: 28.00,
-    rating: 4.5,
-    category: "plants",
-    img: "/cat-balcony.png",
-    slug: "monstera",
-    tags: ["outdoor", "flowers", "balcony", "colorful", "bright"],
-    description: "A pre-potted selection of colorful annuals tailored for sunny balconies and flower boxes."
-  },
-  {
-    id: 5,
-    name: "Wildflower Seeds Mix",
-    price: 18.00,
-    rating: 4.6,
-    category: "seeds",
-    img: "/cat-flowers.png",
-    slug: "monstera",
-    tags: ["seeds", "flowers", "wildflowers", "mix", "garden"],
-    description: "Premium blend of organic seeds that grow into a pollinator-friendly cottage wildflower meadow."
-  },
-  {
-    id: 6,
-    name: "Succulent Garden Set",
-    price: 24.00,
-    rating: 4.4,
-    category: "plants",
-    img: "/cat-succulents.png",
-    slug: "monstera",
-    tags: ["indoor", "succulent", "mini", "set", "desktop"],
-    description: "Curated collection of 4 unique miniature succulents pre-planted in clay nursery pots."
-  },
-  {
-    id: 7,
-    name: "Moisture Meter Pro",
-    price: 15.00,
-    rating: 4.7,
-    category: "tools",
-    img: "/product-spray.png",
-    slug: "monstera",
-    tags: ["tools", "care", "watering", "accessories", "sensor"],
-    description: "Instant probe tester that measures soil moisture levels at root level to prevent overwatering."
-  },
-  {
-    id: 8,
-    name: "AI Care Soil Tester",
-    price: 19.50,
-    rating: 4.8,
-    category: "tools",
-    img: "/product-soil.png",
-    slug: "monstera",
-    tags: ["tools", "care", "smart", "sensor", "soil"],
-    description: "Bluetooth-enabled soil analyzer tracking nutrients, pH, temperature, and light values."
-  }
-];
-
-function SearchResultsContent() {
-  const searchParams = useSearchParams();
-  const initialQuery = searchParams.get("q") || "";
-
-  // Local States
-  const [query, setQuery] = useState(initialQuery);
-  const [searchInput, setSearchInput] = useState(initialQuery);
-  const [categoryFilter, setCategoryFilter] = useState<"all" | "plants" | "seeds" | "tools">("all");
-  const [sortBy, setSortBy] = useState<"relevance" | "price-asc" | "price-desc" | "rating-desc">("relevance");
-  const [cartCount, setCartCount] = useState(0);
-  const [addingId, setAddingId] = useState<number | null>(null);
-
-  // Sync state if URL query changes
-  useEffect(() => {
-    setQuery(initialQuery);
-    setSearchInput(initialQuery);
-  }, [initialQuery]);
-
-  // Load cart count from local storage if available
-  useEffect(() => {
-    const saved = localStorage.getItem("cartCount");
-    if (saved) setCartCount(Number(saved));
-  }, []);
-
-  // Handle local page search submission
-  const handleSearchSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    setQuery(searchInput);
-    // update URL parameter without full page reload
-    if (window.history.pushState) {
-      const newurl = window.location.protocol + "//" + window.location.host + window.location.pathname + `?q=${encodeURIComponent(searchInput)}`;
-      window.history.pushState({ path: newurl }, '', newurl);
-    }
-  };
-
-  // Add to cart simulator
-  const handleAddToCart = (productId: number) => {
-    setAddingId(productId);
-    setTimeout(() => {
-      const newCount = cartCount + 1;
-      setCartCount(newCount);
-      localStorage.setItem("cartCount", String(newCount));
-      setAddingId(null);
-    }, 800);
-  };
-
-  // Filter & Search Logic
-  const filteredProducts = PRODUCT_CATALOG.filter(item => {
-    // 1. Text Search matching name, category, description, tags
-    const matchesQuery = !query.trim() || (() => {
-      const q = query.toLowerCase().trim();
-      return (
-        item.name.toLowerCase().includes(q) ||
-        item.category.toLowerCase().includes(q) ||
-        item.description.toLowerCase().includes(q) ||
-        item.tags.some(tag => tag.toLowerCase().includes(q))
-      );
-    })();
-
-    // 2. Category Filter
-    const matchesCategory = categoryFilter === "all" || item.category === categoryFilter;
-
-    return matchesQuery && matchesCategory;
-  });
-
-  // Sorting Logic
-  const sortedProducts = [...filteredProducts].sort((a, b) => {
-    if (sortBy === "price-asc") return a.price - b.price;
-    if (sortBy === "price-desc") return b.price - a.price;
-    if (sortBy === "rating-desc") return b.rating - a.rating;
-    return a.id - b.id; // relevance default
-  });
-
-  // Recommended products list for empty state
-  const popularRecommendations = PRODUCT_CATALOG.slice(0, 3);
-
-  // Render Stars helper
-  const renderStars = (rating: number) => {
-    const stars = [];
-    const floor = Math.floor(rating);
-    for (let i = 1; i <= 5; i++) {
-      stars.push(
-        <span key={i} style={{ color: i <= floor ? "#cba135" : "rgba(28,28,28,0.2)" }}>★</span>
-      );
-    }
-    return <div style={{ display: "inline-flex", gap: "2px", fontSize: "14px" }}>{stars}</div>;
-  };
+/* ── Product Card ─────────────────────────────────────────────────────────── */
+function ProductCard({ p }: { p: SearchProduct }) {
+  const discount = p.compare_at_price && p.compare_at_price > p.base_price
+    ? Math.round(((p.compare_at_price - p.base_price) / p.compare_at_price) * 100)
+    : 0;
 
   return (
-    <div className="search-page-container fade-up">
-      {/* LOCAL STYLES FOR SEARCH RESULTS PAGE */}
-      <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Playfair+Display:ital,wght@0,700;1,400;1,700&display=swap');
-        
-        .search-page-container {
-          max-width: 1200px;
-          margin: 0 auto;
-          padding: 40px 24px;
-          font-family: 'Outfit', sans-serif;
-        }
+    <div
+      style={{
+        background: T.bgCard,
+        border: `1.5px solid ${T.border}`,
+        borderRadius: T.radius,
+        overflow: "hidden",
+        display: "flex",
+        flexDirection: "column",
+        transition: "transform 0.2s, box-shadow 0.2s, border-color 0.2s",
+        boxShadow: T.shadow,
+        position: "relative",
+      }}
+      onMouseEnter={(e) => {
+        (e.currentTarget as HTMLDivElement).style.transform = "translateY(-3px)";
+        (e.currentTarget as HTMLDivElement).style.boxShadow = T.shadowHover;
+        (e.currentTarget as HTMLDivElement).style.borderColor = T.greenBorder;
+      }}
+      onMouseLeave={(e) => {
+        (e.currentTarget as HTMLDivElement).style.transform = "translateY(0)";
+        (e.currentTarget as HTMLDivElement).style.boxShadow = T.shadow;
+        (e.currentTarget as HTMLDivElement).style.borderColor = T.border;
+      }}
+    >
+      {/* Discount badge */}
+      {discount > 0 && (
+        <span style={{
+          position: "absolute", top: 12, left: 12, zIndex: 2,
+          background: "#dc2626", color: "#fff", fontSize: 11,
+          fontWeight: 700, padding: "3px 8px", borderRadius: 6,
+        }}>
+          {discount}% OFF
+        </span>
+      )}
 
-        .fade-up {
-          animation: fadeUp 0.45s ease-out both;
-        }
-        @keyframes fadeUp {
-          from { opacity: 0; transform: translateY(16px); }
-          to { opacity: 1; transform: translateY(0); }
-        }
+      {/* Stock status badge */}
+      {!p.in_stock && (
+        <span style={{
+          position: "absolute", top: 12, right: 12, zIndex: 2,
+          background: "rgba(0,0,0,0.6)", color: "#fff", fontSize: 11,
+          fontWeight: 600, padding: "3px 8px", borderRadius: 6,
+        }}>
+          Out of Stock
+        </span>
+      )}
 
-        /* Search Header Input bar */
-        .search-form-bar {
-          display: flex;
-          gap: 12px;
-          max-width: 600px;
-          margin: 0 auto 40px;
-        }
-        .search-bar-input {
-          flex: 1;
-          height: 50px;
-          border-radius: 12px;
-          border: 1.5px solid ${T.border};
-          padding: 0 18px;
-          font-family: 'Outfit', sans-serif;
-          font-size: 15px;
-          background: ${T.bgCard};
-          outline: none;
-          transition: all 0.2s ease;
-          box-shadow: ${T.shadow};
-        }
-        .search-bar-input:focus {
-          border-color: ${T.green};
-          box-shadow: 0 0 0 3px ${T.greenLight}, ${T.shadow};
-        }
+      {/* Image container */}
+      <Link href={`/products/${p.slug}`} style={{ textDecoration: "none" }}>
+        <div style={{
+          width: "100%", height: 210, background: T.bgMuted,
+          overflow: "hidden", position: "relative",
+          display: "flex", alignItems: "center", justifyContent: "center",
+        }}>
+          {p.primary_image ? (
+            <img
+              src={p.primary_image}
+              alt={p.title}
+              style={{ width: "100%", height: "100%", objectFit: "cover" }}
+            />
+          ) : (
+            <span style={{ fontSize: 54 }}>🌿</span>
+          )}
+        </div>
+      </Link>
 
-        /* Dual Column Layout */
-        .search-layout {
-          display: grid;
-          grid-template-columns: 240px 1fr;
-          gap: 32px;
-          align-items: start;
-        }
-        @media (max-width: 800px) {
-          .search-layout {
-            grid-template-columns: 1fr;
-          }
-          .filters-sidebar {
-            position: relative !important;
-            top: 0 !important;
-            width: 100%;
-          }
-        }
+      {/* Details */}
+      <div style={{ padding: "16px", display: "flex", flexDirection: "column", flex: 1 }}>
+        {p.product_type && (
+          <span style={{
+            fontSize: 11, fontWeight: 700, color: T.green,
+            textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 4,
+          }}>
+            {p.product_type}
+          </span>
+        )}
 
-        /* Filters sidebar */
-        .filters-sidebar {
-          background: ${T.bgCard};
-          border: 1px solid ${T.border};
-          border-radius: 18px;
-          padding: 24px;
-          box-shadow: ${T.shadow};
-        }
-        .filter-section-title {
-          font-size: 14px;
-          font-weight: 700;
-          color: ${T.heading};
-          text-transform: uppercase;
-          letter-spacing: 0.5px;
-          margin-bottom: 14px;
-          border-bottom: 1.5px solid ${T.border};
-          padding-bottom: 6px;
-        }
-        .filter-option-btn {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          width: 100%;
-          padding: 8px 12px;
-          border-radius: 8px;
-          border: none;
-          background: transparent;
-          font-family: 'Outfit', sans-serif;
-          font-size: 14px;
-          color: ${T.body};
-          cursor: pointer;
-          transition: all 0.15s ease;
-          margin-bottom: 6px;
-          text-align: left;
-        }
-        .filter-option-btn:hover {
-          background: rgba(0, 0, 0, 0.02);
-          color: ${T.heading};
-        }
-        .filter-option-btn.active {
-          background: ${T.greenLight};
-          color: ${T.greenMid};
-          font-weight: 600;
-        }
+        <Link href={`/products/${p.slug}`} style={{ textDecoration: "none", color: T.heading }}>
+          <h3 style={{
+            margin: "0 0 6px", fontSize: 15, fontWeight: 700,
+            lineHeight: 1.3, display: "-webkit-box", WebkitLineClamp: 2,
+            WebkitBoxOrient: "vertical", overflow: "hidden",
+          }}>
+            {p.title}
+          </h3>
+        </Link>
 
-        /* Product Cards Grid */
-        .products-grid {
-          display: grid;
-          grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-          gap: 24px;
-        }
-        .product-card {
-          background: ${T.bgCard};
-          border-radius: 18px;
-          border: 1px solid ${T.border};
-          overflow: hidden;
-          transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
-          display: flex;
-          flex-direction: column;
-        }
-        .product-card:hover {
-          box-shadow: ${T.shadowHover};
-          border-color: ${T.greenPale};
-          transform: translateY(-4px);
-        }
-        .card-img-wrapper {
-          position: relative;
-          width: 100%;
-          height: 200px;
-          background: ${T.bgMuted};
-          overflow: hidden;
-          border-bottom: 1px solid ${T.border};
-        }
-        .card-img {
-          width: 100%;
-          height: 100%;
-          object-fit: cover;
-          transition: transform 0.4s ease;
-        }
-        .product-card:hover .card-img {
-          transform: scale(1.05);
-        }
-        .category-badge {
-          position: absolute;
-          top: 12px; left: 12px;
-          background: ${T.white};
-          color: ${T.muted};
-          border: 1px solid ${T.border};
-          border-radius: 99px;
-          padding: 3px 10px;
-          font-size: 11px;
-          font-weight: 600;
-          text-transform: uppercase;
-          letter-spacing: 0.5px;
-          box-shadow: 0 2px 8px rgba(0,0,0,0.03);
-        }
-
-        /* Action Buttons */
-        .green-btn {
-          background: ${T.green};
-          color: ${T.white};
-          font-family: 'Outfit', sans-serif;
-          font-weight: 600;
-          font-size: 13.5px;
-          height: 38px;
-          padding: 0 16px;
-          border-radius: 99px;
-          border: none;
-          cursor: pointer;
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          gap: 6px;
-          transition: all 0.2s ease;
-          box-shadow: ${T.shadowBtn};
-        }
-        .green-btn:hover {
-          background: ${T.greenMid};
-          transform: translateY(-1px);
-        }
-        .outline-btn {
-          background: transparent;
-          color: ${T.body};
-          font-family: 'Outfit', sans-serif;
-          font-weight: 600;
-          font-size: 13.5px;
-          height: 38px;
-          padding: 0 16px;
-          border-radius: 99px;
-          border: 1.5px solid ${T.border};
-          cursor: pointer;
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          transition: all 0.2s ease;
-        }
-        .outline-btn:hover {
-          border-color: ${T.heading};
-          background: rgba(0, 0, 0, 0.02);
-        }
-
-        /* Empty state styling */
-        .empty-illustration {
-          border: 1.5px dashed ${T.border};
-          border-radius: 20px;
-          padding: 48px 24px;
-          text-align: center;
-          margin-bottom: 40px;
-        }
-
-        @media (max-width: 600px) {
-          .search-page-container {
-            padding: 24px 16px !important;
-          }
-          .search-form-bar {
-            margin-bottom: 24px !important;
-          }
-        }
-        @media (max-width: 480px) {
-          .search-form-bar {
-            gap: 8px !important;
-          }
-          .search-bar-input {
-            font-size: 14px !important;
-            padding: 0 12px !important;
-            height: 44px !important;
-          }
-          .search-form-bar button {
-            padding: 0 16px !important;
-            font-size: 13px !important;
-            height: 44px !important;
-          }
-        }
-      `}</style>
-
-      {/* Shared Global Header */}
-      <SharedNavbar cartCount={cartCount} />
-
-      {/* Main Search Input Form */}
-      <form onSubmit={handleSearchSubmit} className="search-form-bar" style={{ marginTop: "32px" }}>
-        <input 
-          className="search-bar-input" 
-          value={searchInput} 
-          onChange={e => setSearchInput(e.target.value)} 
-          placeholder="Search plants, seeds, care tools..."
-          onFocus={(e) => {
-            if (typeof window !== "undefined" && window.innerWidth <= 768) {
-              e.target.blur();
-              window.dispatchEvent(new CustomEvent("open-mobile-search"));
-            }
-          }}
-        />
-        <button type="submit" className="green-btn" style={{ height: "50px", padding: "0 24px", borderRadius: "12px" }}>
-          🔍 Search
-        </button>
-      </form>
-
-      {/* Query Banner */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: "24px", flexWrap: "wrap", gap: "10px" }}>
-        <div>
-          <h1 style={{ fontFamily: "'Playfair Display', serif", fontWeight: 700, fontSize: "28px", color: T.heading, margin: 0 }}>
-            {query.trim() ? `Search Results for "${query}"` : "Explore Product Catalog"}
-          </h1>
-          <p style={{ fontSize: "14px", color: T.muted, margin: "4px 0 0" }}>
-            Showing {filteredProducts.length} product{filteredProducts.length !== 1 ? "s" : ""}
+        {p.short_description && (
+          <p style={{
+            margin: "0 0 10px", fontSize: 12, color: T.muted,
+            lineHeight: 1.4, display: "-webkit-box", WebkitLineClamp: 2,
+            WebkitBoxOrient: "vertical", overflow: "hidden",
+          }}>
+            {p.short_description}
           </p>
+        )}
+
+        {/* Rating */}
+        <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 12, fontSize: 12 }}>
+          <span style={{ color: "#f59e0b" }}>★</span>
+          <span style={{ fontWeight: 700, color: T.heading }}>{p.rating_average.toFixed(1)}</span>
+          <span style={{ color: T.muted }}>({p.rating_count})</span>
         </div>
 
-        {/* Sort selector */}
-        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-          <span style={{ fontSize: "13px", fontWeight: 600, color: T.muted, textTransform: "uppercase" }}>Sort By:</span>
-          <select 
-            className="address-select"
-            value={sortBy} 
-            onChange={e => setSortBy(e.target.value as any)}
-            style={{ padding: "6px 12px", fontSize: "13px" }}
+        {/* Price & Action */}
+        <div style={{
+          marginTop: "auto", paddingTop: 10, borderTop: `1px solid ${T.border}`,
+          display: "flex", alignItems: "center", justifyContent: "space-between",
+        }}>
+          <div>
+            <span style={{ fontSize: 17, fontWeight: 800, color: T.heading }}>
+              ₹{p.base_price.toLocaleString("en-IN")}
+            </span>
+            {p.compare_at_price && p.compare_at_price > p.base_price && (
+              <span style={{ fontSize: 12, color: T.muted, textDecoration: "line-through", marginLeft: 6 }}>
+                ₹{p.compare_at_price.toLocaleString("en-IN")}
+              </span>
+            )}
+          </div>
+          <Link
+            href={`/products/${p.slug}`}
+            style={{
+              padding: "7px 14px", borderRadius: 8, background: T.greenPale,
+              color: T.green, fontWeight: 700, fontSize: 12, textDecoration: "none",
+              border: `1px solid ${T.greenBorder}`, transition: "background 0.2s",
+            }}
           >
-            <option value="relevance">Relevance</option>
-            <option value="price-asc">Price: Low to High</option>
-            <option value="price-desc">Price: High to Low</option>
-            <option value="rating-desc">Top Rated</option>
-          </select>
+            View →
+          </Link>
         </div>
       </div>
+    </div>
+  );
+}
 
-      {/* Content Layout */}
-      <div className="search-layout">
+/* ── Skeleton Card ────────────────────────────────────────────────────────── */
+function SkeletonCard() {
+  return (
+    <div style={{
+      background: T.bgCard, border: `1.5px solid ${T.border}`,
+      borderRadius: T.radius, height: 360, overflow: "hidden",
+      padding: 16, display: "flex", flexDirection: "column", gap: 12,
+    }}>
+      <div style={{ width: "100%", height: 180, background: "#f0ede8", borderRadius: 10 }} />
+      <div style={{ width: "40%", height: 12, background: "#f0ede8", borderRadius: 4 }} />
+      <div style={{ width: "80%", height: 16, background: "#f0ede8", borderRadius: 4 }} />
+      <div style={{ width: "60%", height: 12, background: "#f5f3ef", borderRadius: 4 }} />
+    </div>
+  );
+}
+
+/* ── Popular Categories Backup ────────────────────────────────────────────── */
+const POPULAR_CATEGORIES = [
+  { name: "Indoor Plants", slug: "indoor-plants", icon: "🪴" },
+  { name: "Air Purifying", slug: "air-purifying", icon: "🍃" },
+  { name: "Flowering Plants", slug: "flowering-plants", icon: "🌸" },
+  { name: "Pots & Planters", slug: "pots-planters", icon: "🏺" },
+  { name: "Seeds & Soil", slug: "seeds-soil", icon: "🌱" },
+  { name: "Plant Tools", slug: "plant-tools", icon: "✂️" },
+];
+
+/* ── Main Search View ─────────────────────────────────────────────────────── */
+function SearchContent() {
+  const searchParams = useSearchParams();
+  const router = useRouter();
+
+  const urlQuery = searchParams.get("q") || "";
+  const urlCategory = searchParams.get("category") || undefined;
+
+  const {
+    searchTerm, setSearchTerm,
+    debouncedQuery,
+    category, setCategory,
+    minPrice, setMinPrice,
+    maxPrice, setMaxPrice,
+    inStock, setInStock,
+    minRating, setMinRating,
+    sortBy, setSortBy,
+    page, setPage,
+    resetFilters,
+    data, isLoading, isError,
+  } = useSearch({
+    q: urlQuery,
+    category: urlCategory,
+    page_size: 24,
+  });
+
+  // Keep search bar in sync if URL query changes
+  useEffect(() => {
+    if (urlQuery !== searchTerm) {
+      setSearchTerm(urlQuery);
+    }
+  }, [urlQuery]);
+
+  const handleSearchSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    router.push(`/search?q=${encodeURIComponent(searchTerm)}`);
+  };
+
+  const activeFilterCount = [
+    category, minPrice, maxPrice, inStock, minRating,
+  ].filter((v) => v !== undefined && v !== false).length;
+
+  return (
+    <div style={{ maxWidth: 1200, margin: "0 auto", padding: "32px 16px 80px" }}>
+      {/* Search Bar Header */}
+      <div style={{ marginBottom: 32 }}>
+        <form onSubmit={handleSearchSubmit} style={{ position: "relative", maxWidth: 640, margin: "0 auto 16px" }}>
+          <span style={{
+            position: "absolute", left: 16, top: "50%", transform: "translateY(-50%)",
+            fontSize: 20, color: T.muted, pointerEvents: "none",
+          }}>
+            🔍
+          </span>
+          <input
+            type="text"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            placeholder="Search plants, pots, seeds, tools…"
+            id="search-input-main"
+            style={{
+              width: "100%", padding: "14px 44px 14px 48px", borderRadius: 30,
+              border: `2px solid ${T.greenBorder}`, fontSize: 16, outline: "none",
+              background: "#fff", boxShadow: T.shadow, color: T.heading,
+              fontFamily: "inherit", transition: "border-color 0.2s",
+            }}
+            onFocus={(e) => (e.target.style.borderColor = T.green)}
+            onBlur={(e) => (e.target.style.borderColor = T.greenBorder)}
+          />
+          {searchTerm && (
+            <button
+              type="button"
+              id="btn-clear-search"
+              onClick={() => { setSearchTerm(""); router.push("/search"); }}
+              style={{
+                position: "absolute", right: 14, top: "50%", transform: "translateY(-50%)",
+                background: "transparent", border: "none", fontSize: 18, color: T.muted,
+                cursor: "pointer", padding: 4,
+              }}
+            >
+              ✕
+            </button>
+          )}
+        </form>
+
+        {/* Suggestions Bar */}
+        {data?.suggestions && data.suggestions.length > 0 && (
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "center", alignItems: "center" }}>
+            <span style={{ fontSize: 12, fontWeight: 700, color: T.muted }}>Suggestions:</span>
+            {data.suggestions.map((s) => (
+              <button
+                key={s}
+                onClick={() => { setSearchTerm(s); router.push(`/search?q=${encodeURIComponent(s)}`); }}
+                style={{
+                  padding: "4px 12px", borderRadius: 20, background: T.greenPale,
+                  border: `1px solid ${T.greenBorder}`, color: T.green,
+                  fontSize: 12, fontWeight: 600, cursor: "pointer",
+                }}
+              >
+                {s}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Main Grid Layout */}
+      <div style={{ display: "grid", gridTemplateColumns: "240px 1fr", gap: 28 }}>
         {/* Sidebar Filters */}
-        <aside className="filters-sidebar">
-          <h3 className="filter-section-title">Categories</h3>
-          <button 
-            type="button" 
-            className={`filter-option-btn ${categoryFilter === "all" ? "active" : ""}`}
-            onClick={() => setCategoryFilter("all")}
-          >
-            <span>All Products</span>
-            <span style={{ fontSize: "11px", opacity: 0.6 }}>({PRODUCT_CATALOG.length})</span>
-          </button>
-          <button 
-            type="button" 
-            className={`filter-option-btn ${categoryFilter === "plants" ? "active" : ""}`}
-            onClick={() => setCategoryFilter("plants")}
-          >
-            <span>🌿 Plants</span>
-            <span style={{ fontSize: "11px", opacity: 0.6 }}>({PRODUCT_CATALOG.filter(p=>p.category==="plants").length})</span>
-          </button>
-          <button 
-            type="button" 
-            className={`filter-option-btn ${categoryFilter === "seeds" ? "active" : ""}`}
-            onClick={() => setCategoryFilter("seeds")}
-          >
-            <span>🌻 Seeds</span>
-            <span style={{ fontSize: "11px", opacity: 0.6 }}>({PRODUCT_CATALOG.filter(p=>p.category==="seeds").length})</span>
-          </button>
-          <button 
-            type="button" 
-            className={`filter-option-btn ${categoryFilter === "tools" ? "active" : ""}`}
-            onClick={() => setCategoryFilter("tools")}
-          >
-            <span>🛠️ Tools & Care</span>
-            <span style={{ fontSize: "11px", opacity: 0.6 }}>({PRODUCT_CATALOG.filter(p=>p.category==="tools").length})</span>
-          </button>
-        </aside>
-
-        {/* Results grid */}
-        <main>
-          {sortedProducts.length > 0 ? (
-            <div className="products-grid">
-              {sortedProducts.map((product) => (
-                <div key={product.id} className="product-card scale-in">
-                  <div className="card-img-wrapper">
-                    <img src={product.img} alt={product.name} className="card-img" />
-                    <span className="category-badge">{product.category}</span>
-                  </div>
-                  
-                  {/* Card Info */}
-                  <div style={{ padding: "18px", display: "flex", flexDirection: "column", flex: 1 }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
-                      {renderStars(product.rating)}
-                      <span style={{ fontSize: "12px", fontWeight: 600, color: T.amber }}>{product.rating}</span>
-                    </div>
-
-                    <h3 style={{ fontSize: "15px", fontWeight: 700, color: T.heading, margin: "0 0 6px", lineHeight: "1.4" }}>
-                      {product.name}
-                    </h3>
-                    
-                    <p style={{ fontSize: "12.5px", color: T.muted, margin: "0 0 14px", flex: 1, lineHeight: "1.4" }}>
-                      {product.description}
-                    </p>
-
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderTop: `1px solid ${T.border}`, paddingTop: "14px" }}>
-                      <span style={{ fontSize: "18px", fontWeight: 800, color: T.heading }}>
-                        ${product.price.toFixed(2)}
-                      </span>
-
-                      <div style={{ display: "flex", gap: "6px" }}>
-                        <Link href={`/plants/${product.slug}`} className="outline-btn" style={{ padding: "0 12px" }}>
-                          Info
-                        </Link>
-                        <button 
-                          type="button" 
-                          className="green-btn" 
-                          onClick={() => handleAddToCart(product.id)}
-                          disabled={addingId === product.id}
-                          style={{
-                            background: addingId === product.id ? T.greenMid : T.green,
-                            minWidth: "90px"
-                          }}
-                        >
-                          {addingId === product.id ? "Adding..." : "Add"}
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            /* EMPTY SEARCH STATE */
-            <div className="scale-in">
-              <div className="empty-illustration">
-                <div style={{ fontSize: "48px", marginBottom: "12px" }}>🔍</div>
-                <h2 style={{ fontSize: "18px", fontWeight: 700, color: T.heading, margin: "0 0 6px" }}>No results found</h2>
-                <p style={{ fontSize: "14px", color: T.muted, maxWidth: "420px", margin: "0 auto", lineHeight: "1.5" }}>
-                  We couldn't find any products matching <strong>"{query}"</strong>. Try checking your spelling, using more general terms, or clear filters.
-                </p>
-                <button type="button" className="green-btn" style={{ marginTop: "20px" }} onClick={() => { setQuery(""); setSearchInput(""); setCategoryFilter("all"); }}>
-                  Clear Search Filters
+        <aside style={{ display: "flex", flexDirection: "column", gap: 24 }}>
+          <div style={{
+            background: T.bgCard, border: `1.5px solid ${T.border}`,
+            borderRadius: T.radius, padding: 20, boxShadow: T.shadow,
+          }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+              <h2 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: T.heading }}>
+                Filters {activeFilterCount > 0 && `(${activeFilterCount})`}
+              </h2>
+              {activeFilterCount > 0 && (
+                <button
+                  id="btn-reset-filters"
+                  onClick={resetFilters}
+                  style={{
+                    background: "transparent", border: "none", color: T.green,
+                    fontSize: 12, fontWeight: 700, cursor: "pointer", padding: 0,
+                  }}
+                >
+                  Reset all
                 </button>
-              </div>
+              )}
+            </div>
 
-              {/* Recommendations */}
-              <div>
-                <h3 style={{ fontFamily: "'Playfair Display', serif", fontSize: "20px", fontWeight: 700, color: T.heading, marginBottom: "16px" }}>
-                  Popular Recommendations
-                </h3>
-                <div className="products-grid">
-                  {popularRecommendations.map((product) => (
-                    <div key={product.id} className="product-card">
-                      <div className="card-img-wrapper">
-                        <img src={product.img} alt={product.name} className="card-img" />
-                        <span className="category-badge">{product.category}</span>
+            {/* Category filter */}
+            {data?.categories && data.categories.length > 0 && (
+              <div style={{ marginBottom: 20 }}>
+                <label style={{ fontSize: 13, fontWeight: 700, color: T.muted, display: "block", marginBottom: 8 }}>
+                  Category
+                </label>
+                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                  {data.categories.map((c) => (
+                    <label key={c.id} style={{
+                      display: "flex", alignItems: "center", justifyContent: "space-between",
+                      fontSize: 13, color: category === c.slug ? T.green : T.body,
+                      fontWeight: category === c.slug ? 700 : 500, cursor: "pointer",
+                    }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <input
+                          type="checkbox"
+                          checked={category === c.slug}
+                          onChange={(e) => setCategory(e.target.checked ? c.slug : undefined)}
+                          style={{ accentColor: T.green }}
+                        />
+                        <span>{c.name}</span>
                       </div>
-                      <div style={{ padding: "18px", display: "flex", flexDirection: "column", flex: 1 }}>
-                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
-                          {renderStars(product.rating)}
-                          <span style={{ fontSize: "12px", fontWeight: 600, color: T.amber }}>{product.rating}</span>
-                        </div>
-                        <h3 style={{ fontSize: "15px", fontWeight: 700, color: T.heading, margin: "0 0 6px" }}>
-                          {product.name}
-                        </h3>
-                        <p style={{ fontSize: "12px", color: T.muted, margin: "0 0 14px", flex: 1, lineHeight: "1.4" }}>
-                          {product.description}
-                        </p>
-                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderTop: `1px solid ${T.border}`, paddingTop: "14px" }}>
-                          <span style={{ fontSize: "16px", fontWeight: 800, color: T.heading }}>
-                            ${product.price.toFixed(2)}
-                          </span>
-                          <div style={{ display: "flex", gap: "6px" }}>
-                            <Link href={`/plants/${product.slug}`} className="outline-btn" style={{ padding: "0 12px" }}>
-                              Info
-                            </Link>
-                            <button 
-                              type="button" 
-                              className="green-btn" 
-                              onClick={() => handleAddToCart(product.id)}
-                              disabled={addingId === product.id}
-                              style={{ minWidth: "90px" }}
-                            >
-                              Add
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
+                      <span style={{ fontSize: 11, color: T.muted }}>({c.product_count})</span>
+                    </label>
                   ))}
                 </div>
               </div>
+            )}
+
+            {/* Price Range */}
+            <div style={{ marginBottom: 20 }}>
+              <label style={{ fontSize: 13, fontWeight: 700, color: T.muted, display: "block", marginBottom: 8 }}>
+                Price Range (₹)
+              </label>
+              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                <input
+                  type="number"
+                  placeholder="Min"
+                  value={minPrice ?? ""}
+                  onChange={(e) => setMinPrice(e.target.value ? Number(e.target.value) : undefined)}
+                  style={{
+                    width: "100%", padding: "6px 10px", borderRadius: 8,
+                    border: `1.5px solid ${T.border}`, fontSize: 13, outline: "none",
+                  }}
+                />
+                <span style={{ color: T.muted }}>–</span>
+                <input
+                  type="number"
+                  placeholder="Max"
+                  value={maxPrice ?? ""}
+                  onChange={(e) => setMaxPrice(e.target.value ? Number(e.target.value) : undefined)}
+                  style={{
+                    width: "100%", padding: "6px 10px", borderRadius: 8,
+                    border: `1.5px solid ${T.border}`, fontSize: 13, outline: "none",
+                  }}
+                />
+              </div>
             </div>
+
+            {/* In Stock Toggle */}
+            <div style={{ marginBottom: 20 }}>
+              <label style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer", fontSize: 13, color: T.body, fontWeight: 600 }}>
+                <input
+                  type="checkbox"
+                  checked={!!inStock}
+                  onChange={(e) => setInStock(e.target.checked ? true : undefined)}
+                  style={{ accentColor: T.green }}
+                />
+                In-Stock Only
+              </label>
+            </div>
+
+            {/* Minimum Rating */}
+            <div>
+              <label style={{ fontSize: 13, fontWeight: 700, color: T.muted, display: "block", marginBottom: 8 }}>
+                Minimum Rating
+              </label>
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                {[4, 3, 2].map((r) => (
+                  <label key={r} style={{
+                    display: "flex", alignItems: "center", gap: 8, cursor: "pointer",
+                    fontSize: 13, color: minRating === r ? T.green : T.body,
+                    fontWeight: minRating === r ? 700 : 500,
+                  }}>
+                    <input
+                      type="radio"
+                      name="min-rating"
+                      checked={minRating === r}
+                      onChange={() => setMinRating(minRating === r ? undefined : r)}
+                      style={{ accentColor: T.green }}
+                    />
+                    <span>{r}★ & above</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+          </div>
+        </aside>
+
+        {/* Results Area */}
+        <main>
+          {/* Toolbar */}
+          <div style={{
+            display: "flex", alignItems: "center", justifyContent: "space-between",
+            marginBottom: 20, paddingBottom: 16, borderBottom: `1px solid ${T.border}`,
+            flexWrap: "wrap", gap: 12,
+          }}>
+            <div>
+              <h1 style={{ margin: 0, fontSize: 20, fontWeight: 800, color: T.heading }}>
+                {debouncedQuery ? `Results for "${debouncedQuery}"` : "All Products"}
+              </h1>
+              {data && (
+                <span style={{ fontSize: 13, color: T.muted, marginTop: 2, display: "block" }}>
+                  {data.total} product{data.total !== 1 ? "s" : ""} found
+                </span>
+              )}
+            </div>
+
+            {/* Sort selection */}
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <label htmlFor="sort-select" style={{ fontSize: 13, fontWeight: 600, color: T.muted }}>
+                Sort by:
+              </label>
+              <select
+                id="sort-select"
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value as any)}
+                style={{
+                  padding: "8px 12px", borderRadius: 8, border: `1.5px solid ${T.border}`,
+                  fontSize: 13, fontWeight: 600, color: T.body, background: "#fff",
+                  outline: "none", cursor: "pointer",
+                }}
+              >
+                <option value="relevance">Relevance</option>
+                <option value="popularity">Popularity</option>
+                <option value="price_asc">Price: Low to High</option>
+                <option value="price_desc">Price: High to Low</option>
+                <option value="newest">Newest Arrivals</option>
+                <option value="rating">Top Rated</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Skeletons */}
+          {isLoading && (
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 20 }}>
+              {[1, 2, 3, 4, 5, 6].map((i) => <SkeletonCard key={i} />)}
+            </div>
+          )}
+
+          {/* Error */}
+          {isError && (
+            <div style={{
+              background: "rgba(220,38,38,0.06)", border: "1.5px solid rgba(220,38,38,0.15)",
+              borderRadius: T.radiusSm, padding: "24px", color: "#dc2626", textAlign: "center",
+            }}>
+              ⚠️ Unable to fetch search results. Please refresh or try another query.
+            </div>
+          )}
+
+          {/* Empty state */}
+          {!isLoading && !isError && data && data.items.length === 0 && (
+            <div style={{ textAlign: "center", padding: "60px 20px" }}>
+              <div style={{ fontSize: 56, marginBottom: 16 }}>🌱</div>
+              <h2 style={{ fontSize: 20, fontWeight: 700, color: T.heading, margin: "0 0 8px" }}>
+                No products found for "{debouncedQuery}"
+              </h2>
+              <p style={{ color: T.muted, fontSize: 14, marginBottom: 28 }}>
+                Try checking for spelling errors, clearing filters, or exploring popular categories below.
+              </p>
+
+              {/* Popular Categories */}
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 12, maxWidth: 600, margin: "0 auto" }}>
+                {POPULAR_CATEGORIES.map((cat) => (
+                  <button
+                    key={cat.slug}
+                    onClick={() => { setCategory(cat.slug); setSearchTerm(""); router.push(`/search?category=${cat.slug}`); }}
+                    style={{
+                      background: T.bgCard, border: `1.5px solid ${T.border}`,
+                      borderRadius: T.radiusSm, padding: "16px 12px",
+                      cursor: "pointer", transition: "transform 0.15s, border-color 0.15s",
+                      display: "flex", flexDirection: "column", alignItems: "center", gap: 6,
+                    }}
+                    onMouseEnter={(e) => {
+                      (e.currentTarget as HTMLButtonElement).style.borderColor = T.greenBorder;
+                      (e.currentTarget as HTMLButtonElement).style.transform = "translateY(-2px)";
+                    }}
+                    onMouseLeave={(e) => {
+                      (e.currentTarget as HTMLButtonElement).style.borderColor = T.border;
+                      (e.currentTarget as HTMLButtonElement).style.transform = "translateY(0)";
+                    }}
+                  >
+                    <span style={{ fontSize: 28 }}>{cat.icon}</span>
+                    <span style={{ fontSize: 13, fontWeight: 700, color: T.heading }}>{cat.name}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Product Grid */}
+          {!isLoading && data && data.items.length > 0 && (
+            <>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 20 }}>
+                {data.items.map((product) => (
+                  <ProductCard key={product.id} p={product} />
+                ))}
+              </div>
+
+              {/* Pagination */}
+              {data.total_pages > 1 && (
+                <div style={{ display: "flex", justifyContent: "center", gap: 8, marginTop: 40 }}>
+                  {Array.from({ length: data.total_pages }, (_, i) => i + 1).map((p) => (
+                    <button
+                      key={p}
+                      id={`page-btn-${p}`}
+                      onClick={() => setPage(p)}
+                      style={{
+                        width: 38, height: 38, borderRadius: 8, border: "1.5px solid",
+                        borderColor: p === page ? T.green : T.border,
+                        background: p === page ? T.green : T.bgCard,
+                        color: p === page ? "#fff" : T.body,
+                        fontWeight: p === page ? 700 : 500,
+                        fontSize: 14, cursor: "pointer", transition: "all 0.15s",
+                      }}
+                    >
+                      {p}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </>
           )}
         </main>
       </div>
@@ -669,15 +562,16 @@ function SearchResultsContent() {
   );
 }
 
-export default function SearchResultsPage() {
+export default function SearchPage() {
   return (
-    <div style={{ background: T.bg, minHeight: "100vh", fontFamily: "Outfit, sans-serif", paddingTop: "64px" }}>
-      <Suspense fallback={
-        <div style={{ display: "flex", justifyContent: "center", alignItems: "center", height: "60vh" }}>
-          <p style={{ fontSize: "16px", color: T.muted }}>Loading search results...</p>
-        </div>
-      }>
-        <SearchResultsContent />
+    <div style={{ minHeight: "100vh", background: T.bg, fontFamily: "'Outfit', 'Inter', sans-serif" }}>
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap');
+        * { box-sizing: border-box; }
+      `}</style>
+      <SharedNavbar />
+      <Suspense fallback={<div style={{ padding: 40, textAlign: "center" }}>Loading Search…</div>}>
+        <SearchContent />
       </Suspense>
     </div>
   );

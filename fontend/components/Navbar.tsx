@@ -240,10 +240,17 @@ export default function SharedNavbar({ cartCount = 0 }: SharedNavbarProps) {
     }
   };
 
-  const executeMobileSearch = (query: string) => {
-    saveSearchQuery(query);
+  const executeSearch = (query: string) => {
+    const trimmed = query.trim();
+    if (!trimmed) return;
+    saveSearchQuery(trimmed);
+    setSearchOpen(false);
     setMobileSearchOpen(false);
-    router.push(`/search?q=${encodeURIComponent(query)}`);
+    router.push(`/search?q=${encodeURIComponent(trimmed)}`);
+  };
+
+  const executeMobileSearch = (query: string) => {
+    executeSearch(query);
   };
 
   const filteredSuggestions = mobileSearchVal.trim()
@@ -615,7 +622,7 @@ export default function SharedNavbar({ cartCount = 0 }: SharedNavbarProps) {
                       setSearchOpen(false);
                       setSearchValue("");
                     } else if (e.key === "Enter" && searchValue.trim()) {
-                      window.location.href = `/search?q=${encodeURIComponent(searchValue.trim())}`;
+                      executeSearch(searchValue);
                     }
                   }}
                   placeholder="Search plants, seeds..." aria-label="Search"
