@@ -14,6 +14,7 @@ from app.api.v1.storefront.reviews import router as reviews_router
 from app.api.v1.storefront.ai_care import router as ai_care_router
 from app.api.v1.storefront.garden_services import router as garden_services_router
 from app.api.v1.storefront.search import router as search_router
+from app.api.v1.storefront.homepage import router as homepage_router
 
 # Admin
 from app.api.v1.admin.products import router as admin_products_router
@@ -47,6 +48,7 @@ api_router.include_router(reviews_router)
 api_router.include_router(ai_care_router)
 api_router.include_router(garden_services_router)
 api_router.include_router(search_router)
+api_router.include_router(homepage_router)
 
 # ── Admin ─────────────────────────────────────────────────────────────
 api_router.include_router(admin_products_router)

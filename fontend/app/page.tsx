@@ -1,26 +1,20 @@
-import SharedNavbar from "@/components/Navbar";
-import AICare from "@/components/home/AICare";
-import Categories from "@/components/home/Categories";
-import Community from "@/components/home/Community";
-import Footer from "@/components/home/Footer";
-import FeaturedProducts from "@/components/home/FeaturedProducts";
-import Hero from "@/components/home/Hero";
-import WhatsAppWidget from "@/components/home/WhatsAppWidget";
+import HomePageClient from "@/components/home/HomePageClient";
+import type { HomepageData } from "@/features/homepage";
 
-export default function Home() {
-  return (
-    <>
-      <SharedNavbar cartCount={3} />
-      <main>
-        <Hero />
-        <Categories />
-        <FeaturedProducts />
-        <AICare />
-        <Community />
-      </main>
-      <Footer />
-      <WhatsAppWidget />
-    </>
-  );
+export const dynamic = "force-dynamic";
+
+async function getHomepage(): Promise<HomepageData | null> {
+  const apiUrl = process.env.API_INTERNAL_URL ?? process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+
+  try {
+    const response = await fetch(apiUrl + "/api/v1/homepage/", { next: { revalidate: 300 } });
+    return response.ok ? (await response.json() as HomepageData) : null;
+  } catch {
+    return null;
+  }
+}
+
+export default async function Home() {
+  return <HomePageClient initialData={await getHomepage()} />;
 }
 

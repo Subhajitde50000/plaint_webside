@@ -123,7 +123,7 @@ export default function CategoriesSection() {
                           (() => {
                             const hasDiscount = typeof it.discount === "number" && it.discount > 0;
                             const original = `$${it.price.toFixed(2)}`;
-                            const newPrice = hasDiscount ? `$${(it.price * (1 - it.discount)).toFixed(2)}` : null;
+                            const newPrice = hasDiscount ? `$${(it.price * (1 - (it.discount ?? 0))).toFixed(2)}` : null;
                             return (
                               <div>
                                 {hasDiscount ? (
@@ -176,7 +176,7 @@ export default function CategoriesSection() {
                           (() => {
                             const hasDiscount = typeof it.discount === "number" && it.discount > 0;
                             const original = `$${it.price.toFixed(2)}`;
-                            const newPrice = hasDiscount ? `$${(it.price * (1 - it.discount)).toFixed(2)}` : null;
+                            const newPrice = hasDiscount ? `$${(it.price * (1 - (it.discount ?? 0))).toFixed(2)}` : null;
                             return (
                               <div>
                                 {hasDiscount ? (
@@ -228,7 +228,7 @@ export default function CategoriesSection() {
                           (() => {
                             const hasDiscount = typeof it.discount === "number" && it.discount > 0;
                             const original = `$${it.price.toFixed(2)}`;
-                            const newPrice = hasDiscount ? `$${(it.price * (1 - it.discount)).toFixed(2)}` : null;
+                            const newPrice = hasDiscount ? `$${(it.price * (1 - (it.discount ?? 0))).toFixed(2)}` : null;
                             return (
                               <div>
                                 {hasDiscount ? (
