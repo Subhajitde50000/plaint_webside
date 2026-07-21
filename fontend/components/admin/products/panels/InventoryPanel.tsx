@@ -52,7 +52,7 @@ export function InventoryPanel({ data, errors, onChange }: Props) {
       </div>
 
       {/* Stock Per Variant */}
-      {data.trackInventory && data.variants.length > 0 && (
+      {data.trackInventory && data.variants.length > 1 && (
         <div style={{ marginBottom: 16 }}>
           <FieldLabel>Stock Quantity (per variant)</FieldLabel>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, marginTop: 8 }}>
@@ -78,6 +78,39 @@ export function InventoryPanel({ data, errors, onChange }: Props) {
               </div>
             ))}
           </div>
+        </div>
+      )}
+
+      {/* Simple Product Stock Input (when 0 or 1 standard variant exists) */}
+      {data.trackInventory && (data.variants.length === 0 || (data.variants.length === 1 && data.variants[0].sizeName === 'Standard')) && (
+        <div style={{ marginBottom: 16 }}>
+          <FieldLabel>Stock Quantity</FieldLabel>
+          <input
+            type="number"
+            value={data.variants[0]?.stock ?? 0}
+            min={0}
+            onChange={e => {
+              const stockVal = parseInt(e.target.value) || 0;
+              onChange('variants', [{
+                id: data.variants[0]?.id || 'new-standard',
+                sizeName: 'Standard',
+                range: '',
+                price: data.currentPrice || '0',
+                sku: data.baseSku || '',
+                stock: stockVal,
+                bestFor: '',
+                potDiameter: '',
+                dispatch: '',
+              }]);
+            }}
+            style={{
+              width: 120, height: 36,
+              background: '#22272e', border: '1px solid #444c56',
+              borderRadius: 6, color: '#cdd9e5', fontSize: 12,
+              fontFamily: "'Outfit', sans-serif",
+              outline: 'none', padding: '0 12px', marginTop: 8,
+            }}
+          />
         </div>
       )}
 

@@ -3,14 +3,16 @@
 import React, { useRef, useState, useCallback } from 'react';
 import { ProductFormData, ProductImage, ValidationErrors } from '../types';
 import { Panel, PanelHeading, GhostButton, InfoBanner } from '../ui';
+import { useUploadProductImage, useDeleteProductImage } from '@/features/admin/hooks/useAdminProducts';
 
 interface Props {
   data: ProductFormData;
   errors: ValidationErrors;
   onChange: (field: keyof ProductFormData, value: unknown) => void;
+  productId?: string;
 }
 
-export function MediaPanel({ data, errors, onChange }: Props) {
+export function MediaPanel({ data, errors, onChange, productId }: Props) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [dragOver, setDragOver] = useState(false);
   const [draggingId, setDraggingId] = useState<string | null>(null);
@@ -18,47 +20,87 @@ export function MediaPanel({ data, errors, onChange }: Props) {
   const [urlModal, setUrlModal] = useState(false);
   const [urlInput, setUrlInput] = useState('');
 
-  const addImages = useCallback((files: FileList | null) => {
+  const uploadMutation = useUploadProductImage(productId || '');
+  const deleteMutation = useDeleteProductImage(productId || '');
+
+  const addImages = useCallback(async (files: FileList | null) => {
     if (!files) return;
     const current = data.images;
     if (current.length >= 8) return;
 
-    Array.from(files).slice(0, 8 - current.length).forEach(file => {
+    const filesArray = Array.from(files).slice(0, 8 - current.length);
+    for (const file of filesArray) {
       if (file.size > 10 * 1024 * 1024) {
         alert(`${file.name} exceeds 10MB limit.`);
-        return;
+        continue;
       }
       const allowed = ['image/jpeg', 'image/png', 'image/webp', 'image/heic'];
       if (!allowed.includes(file.type)) {
         alert(`${file.name} is not supported. Upload JPG, PNG, or WebP.`);
-        return;
+        continue;
       }
-      const url = URL.createObjectURL(file);
-      const newImg: ProductImage = {
-        id: Date.now().toString() + Math.random(),
-        url,
-        filename: file.name,
-        isPrimary: current.length === 0,
-      };
-      onChange('images', [...current, newImg]);
-    });
-  }, [data.images, onChange]);
 
-  const removeImage = (id: string) => {
-    const updated = data.images.filter(i => i.id !== id);
-    if (updated.length > 0) updated[0].isPrimary = true;
-    onChange('images', updated);
+      if (productId) {
+        // Edit mode: upload to server immediately
+        try {
+          await uploadMutation.mutateAsync({ file, isPrimary: current.length === 0 });
+        } catch (err: any) {
+          alert('Failed to upload image: ' + (err?.response?.data?.detail || err.message));
+        }
+      } else {
+        // New mode: add to local queue
+        const url = URL.createObjectURL(file);
+        const newImg: ProductImage = {
+          id: 'local-' + Date.now().toString() + '-' + Math.random(),
+          url,
+          filename: file.name,
+          isPrimary: current.length === 0,
+          file,
+        };
+        onChange('images', [...current, newImg]);
+      }
+    }
+  }, [data.images, onChange, productId, uploadMutation]);
+
+  const removeImage = async (id: string) => {
+    if (productId && !id.startsWith('local-')) {
+      // Edit mode: delete from server immediately
+      if (!confirm('Are you sure you want to delete this image?')) return;
+      try {
+        await deleteMutation.mutateAsync(id);
+      } catch (err: any) {
+        alert('Failed to delete image: ' + (err?.response?.data?.detail || err.message));
+      }
+    } else {
+      // New mode: remove from local queue
+      const updated = data.images.filter(i => i.id !== id);
+      if (updated.length > 0) {
+        updated[0].isPrimary = true;
+      }
+      onChange('images', updated);
+    }
   };
 
-  const addFromUrl = () => {
+  const addFromUrl = async () => {
     if (!urlInput.trim()) return;
-    const newImg: ProductImage = {
-      id: Date.now().toString(),
-      url: urlInput.trim(),
-      filename: 'external-image',
-      isPrimary: data.images.length === 0,
-    };
-    onChange('images', [...data.images, newImg]);
+    if (productId) {
+      try {
+        const response = await fetch(urlInput.trim());
+        const blob = await response.blob();
+        const file = new File([blob], 'url-image.jpg', { type: blob.type || 'image/jpeg' });
+        await uploadMutation.mutateAsync({ file, isPrimary: data.images.length === 0 });
+      } catch (err) {
+        alert('Failed to load image from URL. Make sure it is a valid, publicly accessible image address.');
+      }
+    } else {
+      const newImg: ProductImage = {
+        id: 'local-' + Date.now().toString(),
+        url: urlInput.trim(),
+        filename: 'external-image',
+        isPrimary: data.images.length === 0,
+      };
+      onChange('images', [...data.images, newImg]);
+    }
     setUrlInput('');
     setUrlModal(false);
   };
@@ -262,4 +304,3 @@ export function MediaPanel({ data, errors, onChange }: Props) {
     </Panel>
   );
 }
-

@@ -365,7 +365,9 @@ function DonutChart() {
 
   function polarToCartesian(cx: number, cy: number, radius: number, angle: number) {
     const rad = ((angle - 90) * Math.PI) / 180;
-    return { x: cx + radius * Math.cos(rad), y: cy + radius * Math.sin(rad) };
+    const x = cx + radius * Math.cos(rad);
+    const y = cy + radius * Math.sin(rad);
+    return { x: Number(x.toFixed(4)), y: Number(y.toFixed(4)) };
   }
 
   function describeArc(cx: number, cy: number, outerR: number, innerR: number, startPct: number, endPct: number, expand: boolean) {

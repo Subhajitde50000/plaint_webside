@@ -20,12 +20,31 @@ if dotenv_path.exists():
                 key, value = line.split("=", 1)
                 os.environ.setdefault(key.strip(), value.strip())
 
+# ── Patch SQLite to treat BIGINT as INTEGER (enables autoincrement PKs) ───────
+import sqlalchemy.dialects.sqlite.base as _sb
+
+def _bigint_as_integer(self, type_, **kw):
+    return "INTEGER"
+
+for _attr in dir(_sb.SQLiteTypeCompiler):
+    if "BIG" in _attr.upper() or "bigint" in _attr.lower():
+        setattr(_sb.SQLiteTypeCompiler, _attr, _bigint_as_integer)
+
+_sb.SQLiteTypeCompiler.visit_BIGINT = _bigint_as_integer
+
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from app.config import settings
 from app.database import Base
-from app.models.admin import AdminUser
+from app.models import *
 from app.utils.security import hash_password
+
+from sqlalchemy import event
+
+def _add_if_not_exists_to_indexes(conn, cursor, statement, params, context, executemany):
+    if statement.startswith("CREATE INDEX ") and "IF NOT EXISTS" not in statement:
+        statement = statement.replace("CREATE INDEX ", "CREATE INDEX IF NOT EXISTS ", 1)
+    return statement, params
 
 def get_db_session():
     # Try configured database URL
@@ -44,6 +63,8 @@ def get_db_session():
             print(f"Connecting to database: {url.split('@')[-1] if '@' in url else url}")
             connect_args = {"check_same_thread": False} if "sqlite" in url else {}
             engine = create_engine(url, connect_args=connect_args)
+            if "sqlite" in url:
+                event.listen(engine, "before_cursor_execute", _add_if_not_exists_to_indexes, retval=True)
             conn = engine.connect()
             conn.close()
             Base.metadata.create_all(bind=engine)
@@ -87,6 +108,22 @@ def seed_demo_admin():
             session.add(admin)
             session.commit()
             print("Successfully created demo admin user!")
+
+        # Seed default Kolkata warehouse
+        kolkata_wh = session.query(Warehouse).filter(Warehouse.city == "Kolkata").first()
+        if not kolkata_wh:
+            print("Creating default Kolkata Warehouse...")
+            kolkata_wh = Warehouse(
+                id=1,
+                name="Kolkata Warehouse",
+                city="Kolkata",
+                state="West Bengal",
+                pincode="700001",
+                is_active=True
+            )
+            session.add(kolkata_wh)
+            session.commit()
+            print("Successfully created Kolkata Warehouse!")
 
         print("\n==============================================")
         print("  DEMO ADMIN CREDENTIALS ADDED TO DATABASE")

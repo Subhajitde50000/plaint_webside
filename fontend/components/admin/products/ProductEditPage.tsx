@@ -2,9 +2,17 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import {
+  useAdminProduct,
+  useCreateProduct,
+  useUpdateProduct,
+  useDeleteProduct,
+} from '@/features/admin/hooks/useAdminProducts';
+import { uploadProductImageApi } from '@/features/admin/api/admin-products.api';
 
 // Types
-import { ProductFormData, ValidationErrors, DEFAULT_FORM_DATA } from './types';
+import { ProductFormData, ValidationErrors, DEFAULT_FORM_DATA, ProductStatus, ProductType, StockPolicy } from './types';
 
 // Left column panels
 import { ProductInfoPanel } from './panels/ProductInfoPanel';
@@ -50,9 +58,6 @@ function validate(data: ProductFormData): ValidationErrors {
   if (data.compareAtPrice && data.currentPrice && parseFloat(data.compareAtPrice) < parseFloat(data.currentPrice)) {
     errors.compareAtPrice = 'Compare-at price must be greater than the current price.';
   }
-  if (data.images.length === 0) errors.images = 'Upload at least one product image.';
-  if (!data.category) errors.category = 'Category is required.';
-  if (!data.productType) errors.productType = 'Product type is required.';
   return errors;
 }
 
@@ -60,9 +65,6 @@ function getPublishErrors(data: ProductFormData): string[] {
   const errs: string[] = [];
   if (!data.title.trim()) errs.push('Product title is required.');
   if (!data.currentPrice || parseFloat(data.currentPrice) <= 0) errs.push('Current price is required (must be greater than ₹0).');
-  if (data.images.length === 0) errs.push('Upload at least one product image.');
-  if (!data.category) errs.push('Category is required.');
-  if (!data.productType) errs.push('Product type is required.');
   return errs;
 }
 
@@ -105,6 +107,13 @@ function StatusBadge({ status }: { status: string }) {
 /* ─── Main Component ─────────────────────────────────────────────────────────── */
 export function ProductEditPage({ mode, productId, initialData }: Props) {
   const isNew = mode === 'new';
+  const router = useRouter();
+
+  // Queries & Mutations
+  const { data: fetchedProduct, isLoading: isProductLoading } = useAdminProduct(isNew ? undefined : productId);
+  const createMutation = useCreateProduct();
+  const updateMutation = useUpdateProduct(productId || '');
+  const deleteMutation = useDeleteProduct();
 
   /* Form state */
   const [data, setData] = useState<ProductFormData>({ ...DEFAULT_FORM_DATA, ...initialData });
@@ -124,51 +133,72 @@ export function ProductEditPage({ mode, productId, initialData }: Props) {
   /* Auto-save timer ref */
   const autoSaveRef = useRef<NodeJS.Timeout | null>(null);
 
+  // Populate data when loaded from backend API in edit mode
+  useEffect(() => {
+    if (fetchedProduct && !isNew) {
+      const firstVariant = fetchedProduct.variants?.[0];
+      const firstInventory = firstVariant?.inventory;
+
+      setData(prev => ({
+        ...prev,
+        title: fetchedProduct.title || '',
+        urlHandle: fetchedProduct.slug || '',
+        shortDescription: fetchedProduct.short_description || '',
+        fullDescription: fetchedProduct.description || '',
+        botanicalName: fetchedProduct.botanical_name || '',
+        commonName: fetchedProduct.common_name || '',
+        currentPrice: fetchedProduct.base_price ? String(fetchedProduct.base_price) : '',
+        compareAtPrice: fetchedProduct.compare_at_price ? String(fetchedProduct.compare_at_price) : '',
+        productStatus: (fetchedProduct.status as ProductStatus) || 'draft',
+        productType: (fetchedProduct.product_type?.toLowerCase() as ProductType) || 'plant',
+        skillLevel: fetchedProduct.care_skill || '',
+        lightRequirement: fetchedProduct.care_light || '',
+        waterFrequency: fetchedProduct.care_water || '',
+        temperatureRange: fetchedProduct.care_temperature || '',
+        petFriendly: Boolean(fetchedProduct.is_pet_friendly),
+        airPurifying: Boolean(fetchedProduct.is_air_purifying),
+        images: (fetchedProduct.images || []).map((img: any) => ({
+          id: String(img.id),
+          url: img.url,
+          filename: img.url.split('/').pop() || 'image.jpg',
+          isPrimary: Boolean(img.is_primary),
+        })),
+        seoTitle: fetchedProduct.seo_title || '',
+        seoDescription: fetchedProduct.seo_description || '',
+        variants: (fetchedProduct.variants || []).map((v: any) => ({
+          id: String(v.id),
+          sizeName: v.option_name,
+          range: v.option_detail || '',
+          price: String(v.price),
+          sku: v.sku,
+          stock: v.inventory ? v.inventory.quantity : 0,
+          bestFor: v.best_for || '',
+          potDiameter: v.pot_diameter || '',
+          dispatch: v.dispatch_time || '',
+        })),
+        baseSku: firstVariant?.sku || '',
+        barcode: firstVariant?.barcode || '',
+        trackInventory: firstInventory ? true : false,
+        reorderLevel: firstInventory ? String(firstInventory.reorder_level) : '10',
+        lowStockAlert: firstInventory ? Boolean(firstInventory.low_stock_alert) : true,
+        stockPolicy: firstInventory ? (firstInventory.stock_policy as StockPolicy) : 'deny',
+        warehouse: 'Kolkata Warehouse',
+      }));
+      setIsDirty(false);
+    }
+  }, [fetchedProduct, isNew]);
+
   /* Field change handler */
   const onChange = useCallback((field: keyof ProductFormData, value: unknown) => {
     setData(prev => ({ ...prev, [field]: value }));
     setIsDirty(true);
-    // Clear specific field error on change
     setErrors(prev => { const e = { ...prev }; delete e[field as string]; return e; });
   }, []);
-
-  /* Auto-save every 30s when dirty */
-  useEffect(() => {
-    if (!isDirty) return;
-    if (autoSaveRef.current) clearTimeout(autoSaveRef.current);
-    autoSaveRef.current = setTimeout(async () => {
-      if (!isDirty) return;
-      setIsSavingDraft(true);
-      await new Promise(r => setTimeout(r, 600)); // simulate API
-      setIsSavingDraft(false);
-      setLastSaved('just now');
-      setIsDirty(false);
-    }, 30000);
-    return () => { if (autoSaveRef.current) clearTimeout(autoSaveRef.current); };
-  }, [isDirty, data]);
-
-  /* Keyboard shortcuts */
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      // Close any open modal on Escape
-      if (e.key === 'Escape') {
-        if (showUnsaved) { setShowUnsaved(false); return; }
-        if (showDuplicate) { setShowDuplicate(false); return; }
-        if (showDelete) { setShowDelete(false); return; }
-      }
-      // Save / Publish shortcuts (only when no modal is open)
-      const modalOpen = showUnsaved || showDuplicate || showDelete;
-      if (!modalOpen && (e.metaKey || e.ctrlKey) && e.key === 's') { e.preventDefault(); handleSaveDraft(); }
-      if (!modalOpen && (e.metaKey || e.ctrlKey) && e.key === 'Enter') { e.preventDefault(); handlePublish(); }
-    };
-    window.addEventListener('keydown', handler);
-    return () => window.removeEventListener('keydown', handler);
-  }, [showUnsaved, showDuplicate, showDelete]);
 
   /* Toast auto-dismiss */
   useEffect(() => {
     if (!toast) return;
-    const t = setTimeout(() => setToast(null), 3000);
+    const t = setTimeout(() => setToast(null), 3500);
     return () => clearTimeout(t);
   }, [toast]);
 
@@ -176,15 +206,87 @@ export function ProductEditPage({ mode, productId, initialData }: Props) {
     setToast({ message, type });
   };
 
+  /* Helper to perform save/publish mutation */
+  const saveProduct = async (status: ProductStatus) => {
+    const payload = {
+      title: data.title,
+      slug: data.urlHandle || (data.title ? data.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, '') : undefined),
+      shortDescription: data.shortDescription,
+      description: data.fullDescription,
+      botanicalName: data.botanicalName,
+      commonName: data.commonName,
+      currentPrice: data.currentPrice,
+      compareAtPrice: data.compareAtPrice,
+      status,
+      productType: data.productType,
+      careSkill: data.skillLevel,
+      careLight: data.lightRequirement,
+      careWater: data.waterFrequency,
+      careTemperature: data.temperatureRange,
+      isPetFriendly: data.petFriendly,
+      isAirPurifying: data.airPurifying,
+      seoTitle: data.seoTitle,
+      seoDescription: data.seoDescription,
+      
+      // Seed/update variants and inventory
+      variants: data.variants.map(v => ({
+        id: v.id.startsWith('new-') ? undefined : Number(v.id),
+        option_name: v.sizeName,
+        option_detail: v.range,
+        price: Number(v.price),
+        sku: v.sku,
+        stock: v.stock,
+        best_for: v.bestFor,
+        pot_diameter: v.potDiameter,
+        dispatch_time: v.dispatch,
+      })),
+      base_sku: data.baseSku,
+      barcode: data.barcode,
+      track_inventory: data.trackInventory,
+      reorder_level: Number(data.reorderLevel || 10),
+      low_stock_alert: data.lowStockAlert,
+      stock_policy: data.stockPolicy,
+      warehouse: data.warehouse,
+    };
+
+    if (isNew) {
+      return await createMutation.mutateAsync(payload);
+    } else if (productId) {
+      return await updateMutation.mutateAsync(payload);
+    }
+  };
+
   /* Save Draft */
   const handleSaveDraft = async () => {
     setIsSavingDraft(true);
-    setData(prev => ({ ...prev, productStatus: 'draft' }));
-    await new Promise(r => setTimeout(r, 800));
-    setIsSavingDraft(false);
-    setLastSaved('just now');
-    setIsDirty(false);
-    showToast('✓ Draft saved');
+    try {
+      const res = await saveProduct('draft');
+      setIsDirty(false);
+
+      if (isNew && res) {
+        const newId = res.id || res.uuid;
+        // Upload queued images
+        for (const img of data.images) {
+          if (img.file) {
+            try {
+              await uploadProductImageApi(newId, img.file, img.isPrimary);
+            } catch (err) {
+              console.error("Failed to upload local image on creation", err);
+            }
+          }
+        }
+        showToast('✓ Draft created successfully');
+        router.push(`/admin/products/${newId}/edit`);
+      } else {
+        setData(prev => ({ ...prev, productStatus: 'draft' }));
+        setLastSaved('just now');
+        showToast('✓ Draft saved successfully');
+      }
+    } catch (err: any) {
+      showToast(err?.response?.data?.detail || 'Failed to save draft', 'error');
+    } finally {
+      setIsSavingDraft(false);
+    }
   };
 
   /* Publish */
@@ -194,18 +296,39 @@ export function ProductEditPage({ mode, productId, initialData }: Props) {
       setPublishErrors(errs);
       const fieldErrors = validate(data);
       setErrors(fieldErrors);
-      // Scroll to first error
       setTimeout(() => document.querySelector('[aria-invalid="true"]')?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 100);
       return;
     }
     setIsPublishing(true);
     setPublishErrors([]);
-    await new Promise(r => setTimeout(r, 1200));
-    setIsPublishing(false);
-    setData(prev => ({ ...prev, productStatus: 'active' }));
-    setLastSaved('just now');
-    setIsDirty(false);
-    showToast('Product published successfully. 🎉');
+    try {
+      const res = await saveProduct('active');
+      setIsDirty(false);
+
+      if (isNew && res) {
+        const newId = res.id || res.uuid;
+        // Upload queued images
+        for (const img of data.images) {
+          if (img.file) {
+            try {
+              await uploadProductImageApi(newId, img.file, img.isPrimary);
+            } catch (err) {
+              console.error("Failed to upload local image on creation", err);
+            }
+          }
+        }
+        showToast('Product published successfully! 🎉');
+        router.push(`/admin/products/${newId}/edit`);
+      } else {
+        setData(prev => ({ ...prev, productStatus: 'active' }));
+        setLastSaved('just now');
+        showToast('Product published successfully! 🎉');
+      }
+    } catch (err: any) {
+      showToast(err?.response?.data?.detail || 'Failed to publish product', 'error');
+    } finally {
+      setIsPublishing(false);
+    }
   };
 
   /* Discard */
@@ -217,13 +340,29 @@ export function ProductEditPage({ mode, productId, initialData }: Props) {
   /* Duplicate confirm */
   const handleDuplicateConfirm = async (newTitle: string) => {
     setShowDuplicate(false);
-    showToast('Duplicate created. Review and publish when ready.');
+    try {
+      await createMutation.mutateAsync({
+        ...data,
+        title: newTitle,
+        status: 'draft',
+      });
+      showToast('Duplicate created successfully. Review and publish when ready.');
+    } catch (err: any) {
+      showToast('Failed to duplicate product: ' + (err?.response?.data?.detail || err.message), 'error');
+    }
   };
 
   /* Delete confirm */
   const handleDeleteConfirm = async () => {
     setShowDelete(false);
-    showToast('Product was deleted.', 'warning');
+    if (!productId) return;
+    try {
+      await deleteMutation.mutateAsync(productId);
+      showToast('Product was deleted.', 'warning');
+      router.push('/admin/products');
+    } catch (err: any) {
+      showToast('Failed to delete product: ' + (err?.response?.data?.detail || err.message), 'error');
+    }
   };
 
   /* Product display name */
@@ -232,6 +371,14 @@ export function ProductEditPage({ mode, productId, initialData }: Props) {
   /* Show care/pot panels only for plant/seed */
   const showCarePanel = ['plant', 'seed'].includes(data.productType);
   const showPotUpsell = data.productType === 'plant';
+
+  if (!isNew && isProductLoading) {
+    return (
+      <div style={{ padding: '60px 20px', textAlign: 'center', color: '#768390', fontFamily: "'Outfit', sans-serif" }}>
+        Loading product details...
+      </div>
+    );
+  }
 
   return (
     <>
@@ -269,9 +416,9 @@ export function ProductEditPage({ mode, productId, initialData }: Props) {
               <h1 style={{ fontSize: 24, fontWeight: 700, color: '#cdd9e5', margin: 0 }}>{displayName}</h1>
               <StatusBadge status={data.productStatus} />
             </div>
-            {!isNew && data.baseSku && (
+            {!isNew && (
               <p style={{ fontSize: 11, color: '#768390', marginTop: 4 }}>
-                <span style={{ fontFamily: 'JetBrains Mono, monospace' }}>{data.baseSku}</span>
+                <span style={{ fontFamily: 'JetBrains Mono, monospace' }}>ID: {productId}</span>
                 {lastSaved && <span> · Last saved: {lastSaved}</span>}
               </p>
             )}
@@ -279,7 +426,6 @@ export function ProductEditPage({ mode, productId, initialData }: Props) {
 
           {/* Header actions */}
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-            {/* View on Storefront — always visible, uses urlHandle or slugified title */}
             {(() => {
               const slug = data.urlHandle || (data.title ? data.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') : '');
               const canView = !!slug && data.productStatus === 'active';
@@ -329,20 +475,28 @@ export function ProductEditPage({ mode, productId, initialData }: Props) {
                 Discard
               </button>
             )}
-            <button type="button" onClick={handleSaveDraft} disabled={isSavingDraft || isPublishing}
+            <button
+              type="button"
+              onClick={handleSaveDraft}
+              disabled={isSavingDraft || isPublishing}
               style={{
                 ...headerGhostBtn,
                 background: isSavingDraft ? '#22272e' : 'transparent',
-              }}>
+              }}
+            >
               {isSavingDraft ? 'Saving…' : 'Save Draft'}
             </button>
-            <button type="button" onClick={handlePublish} disabled={isPublishing}
+            <button
+              type="button"
+              onClick={handlePublish}
+              disabled={isPublishing}
               style={{
                 background: '#00b566', border: 'none', borderRadius: 6,
                 color: '#fff', fontSize: 12, fontWeight: 600, padding: '7px 18px',
                 cursor: isPublishing ? 'not-allowed' : 'pointer', height: 36,
                 display: 'inline-flex', alignItems: 'center', gap: 6,
-              }}>
+              }}
+            >
               {isPublishing && <span style={{ width: 12, height: 12, border: '2px solid rgba(255,255,255,0.3)', borderTopColor: '#fff', borderRadius: '50%', animation: 'spin 0.7s linear infinite', display: 'inline-block' }} />}
               Publish
             </button>
@@ -364,7 +518,7 @@ export function ProductEditPage({ mode, productId, initialData }: Props) {
           {/* ────────────── LEFT COLUMN ────────────────────────────────── */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
             <ProductInfoPanel data={data} errors={errors} onChange={onChange} />
-            <MediaPanel data={data} errors={errors} onChange={onChange} />
+            <MediaPanel data={data} errors={errors} onChange={onChange} productId={productId} />
             <PricingPanel data={data} errors={errors} onChange={onChange} />
             <VariantsPanel data={data} errors={errors} onChange={onChange} />
             <InventoryPanel data={data} errors={errors} onChange={onChange} />
@@ -417,7 +571,7 @@ export function ProductEditPage({ mode, productId, initialData }: Props) {
       {showDelete && (
         <DeleteModal
           productTitle={displayName}
-          orderCount={248}
+          orderCount={0}
           onConfirm={handleDeleteConfirm}
           onCancel={() => setShowDelete(false)}
         />

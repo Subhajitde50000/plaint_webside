@@ -421,10 +421,26 @@ export default function ProductDetailPage({ params }: PageProps) {
           originalPrice: v.compare_at_price ? Number(v.compare_at_price) : null,
           discount: v.compare_at_price && Number(v.compare_at_price) > Number(v.price)
             ? Math.round(((Number(v.compare_at_price) - Number(v.price)) / Number(v.compare_at_price)) * 100)
-            : 0
+            : 0,
+          inventory: {
+            quantity: v.inventory ? v.inventory.quantity : 99,
+            reserved: v.inventory ? v.inventory.reserved : 0,
+            available: v.inventory ? (v.inventory.quantity - v.inventory.reserved) : 99,
+            stockPolicy: v.inventory ? v.inventory.stock_policy : 'continue',
+          }
         }))
       : [
-          { name: "Standard", height: "Standard size", bestFor: "Most popular pick", potDia: "N/A", dispatch: "1–2 days", price: basePrice, originalPrice: compareAt, discount }
+          {
+            name: "Standard",
+            height: "Standard size",
+            bestFor: "Most popular pick",
+            potDia: "N/A",
+            dispatch: "1–2 days",
+            price: basePrice,
+            originalPrice: compareAt,
+            discount,
+            inventory: { quantity: 99, reserved: 0, available: 99, stockPolicy: 'continue' }
+          }
         ];
 
     // Image mapping
@@ -580,6 +596,23 @@ export default function ProductDetailPage({ params }: PageProps) {
     return () => obs.disconnect();
   }, []);
 
+  const size = p?.sizes?.[selectedSize] || p?.sizes?.[0];
+
+  // Cap quantity if stockPolicy is 'deny' and size changes
+  useEffect(() => {
+    if (size?.inventory) {
+      const available = size.inventory.available;
+      const policy = size.inventory.stockPolicy;
+      if (policy === 'deny' && available > 0 && qty > available) {
+        setQty(available);
+      } else if (policy === 'deny' && available <= 0) {
+        setQty(0);
+      } else if (qty === 0 && available > 0) {
+        setQty(1);
+      }
+    }
+  }, [selectedSize, size, qty]);
+
   if (isLoading) {
     return (
       <>
@@ -604,10 +637,17 @@ export default function ProductDetailPage({ params }: PageProps) {
     );
   }
 
-  const size = p.sizes[selectedSize] || p.sizes[0];
-  const activePrice = size?.price ?? p.price;
-  const activeOriginalPrice = size?.originalPrice ?? p.originalPrice;
-  const activeDiscount = size?.discount ?? p.discount;
+  const activeSize = p.sizes[selectedSize] || p.sizes[0];
+  const activePrice = activeSize.price;
+  const activeOriginalPrice = activeSize.originalPrice;
+  const activeDiscount = activeSize.discount;
+
+  const inventory = activeSize.inventory || { quantity: 99, reserved: 0, available: 99, stockPolicy: 'continue' };
+  const availableStock = inventory.available;
+  const isOutOfStock = availableStock <= 0;
+  const isLowStock = availableStock > 0 && availableStock <= 10;
+  const stockPolicy = inventory.stockPolicy; // 'deny', 'backorder', 'continue'
+  const isCheckoutDisabled = isOutOfStock && stockPolicy === 'deny';
 
   return (
     <>
@@ -878,17 +918,69 @@ export default function ProductDetailPage({ params }: PageProps) {
               <p style={{ fontFamily: "DM Sans, sans-serif", fontSize: "12px", color: "var(--color-text-secondary)", marginTop: "4px" }}>
                 {p.taxNote}
               </p>
+              {/* Stock status indicator */}
+              <div style={{ marginTop: "12px" }}>
+                {isCheckoutDisabled ? (
+                  <div style={{
+                    display: "inline-flex", alignItems: "center", gap: "6px",
+                    background: "#fdf2f2", border: "1px solid #fbd5d5",
+                    borderRadius: "6px", padding: "6px 12px",
+                    color: "#f87171", fontSize: "13px", fontWeight: 600,
+                    fontFamily: "Poppins, sans-serif"
+                  }}>
+                    <span>🔴 Out of Stock</span>
+                  </div>
+                ) : isOutOfStock ? (
+                  <div style={{
+                    display: "inline-flex", alignItems: "center", gap: "6px",
+                    background: "#fffbeb", border: "1px solid #fef3c7",
+                    borderRadius: "6px", padding: "6px 12px",
+                    color: "#d97706", fontSize: "13px", fontWeight: 600,
+                    fontFamily: "Poppins, sans-serif"
+                  }}>
+                    <span>🟡 {stockPolicy === 'backorder' ? 'Available on Backorder (Ships in 7-10 days)' : 'Pre-order available'}</span>
+                  </div>
+                ) : isLowStock ? (
+                  <div style={{
+                    display: "inline-flex", alignItems: "center", gap: "6px",
+                    background: "#fffaf0", border: "1px solid #feebc8",
+                    borderRadius: "6px", padding: "6px 12px",
+                    color: "#dd6b20", fontSize: "13px", fontWeight: 600,
+                    fontFamily: "Poppins, sans-serif"
+                  }}>
+                    <span>🔥 Only {availableStock} left in stock - order soon!</span>
+                  </div>
+                ) : (
+                  <div style={{
+                    display: "inline-flex", alignItems: "center", gap: "6px",
+                    background: "#f0fdf4", border: "1px solid #dcfce7",
+                    borderRadius: "6px", padding: "6px 12px",
+                    color: "#16a34a", fontSize: "13px", fontWeight: 600,
+                    fontFamily: "Poppins, sans-serif"
+                  }}>
+                    <span>🟢 In Stock (Ready to dispatch)</span>
+                  </div>
+                )}
+              </div>
             </div>
 
             <hr className="pdp-divider" />
 
-            {/* Size selector */}
+            {/* Size / Variant selector */}
             <div style={{ marginBottom: "16px" }}>
               <p style={{
                 fontFamily: "Poppins, sans-serif", fontWeight: 600, fontSize: "14px",
                 color: "var(--color-text-primary)", marginBottom: "12px",
               }}>
-                Plant Size
+                {product?.product_type?.toLowerCase() === 'pot'
+                  ? 'Pot Diameter'
+                  : product?.product_type?.toLowerCase() === 'seed'
+                  ? 'Pack Size'
+                  : product?.product_type?.toLowerCase() === 'soil'
+                  ? 'Weight / Volume'
+                  : product?.product_type?.toLowerCase() === 'tool'
+                  ? 'Option'
+                  : 'Plant Size'}
               </p>
               <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
                 {p.sizes.map((sz, idx) => (
@@ -908,85 +1000,93 @@ export default function ProductDetailPage({ params }: PageProps) {
                     }}
                   >
                     <div style={{ fontWeight: 600, fontSize: "13px", color: "var(--color-green-dark)" }}>{sz.name}</div>
-                    <div style={{ fontFamily: "DM Sans, sans-serif", fontSize: "11px", color: "var(--color-text-secondary)", marginTop: "2px" }}>{sz.height}</div>
+                    {sz.height && (
+                      <div style={{ fontFamily: "DM Sans, sans-serif", fontSize: "11px", color: "var(--color-text-secondary)", marginTop: "2px" }}>{sz.height}</div>
+                    )}
                   </button>
                 ))}
               </div>
-              <p style={{ fontFamily: "DM Sans, sans-serif", fontSize: "12px", color: "var(--color-text-secondary)", marginTop: "10px" }}>
-                Pot not included — browse our pot collection below
-              </p>
+              {product?.product_type?.toLowerCase() === 'plant' && (
+                <p style={{ fontFamily: "DM Sans, sans-serif", fontSize: "12px", color: "var(--color-text-secondary)", marginTop: "10px" }}>
+                  Pot not included — browse our pot collection below
+                </p>
+              )}
             </div>
 
             {/* Size detail card */}
-            <div style={{
-              background: "white", border: "1.5px solid var(--color-green-pale)",
-              borderRadius: "var(--radius-md)", padding: "14px 18px", marginBottom: "20px",
-              display: "grid", gridTemplateColumns: "repeat(4, 1fr)",
-              gap: "0",
-            }}>
-              {[
-                { label: "Height", value: size.height },
-                { label: "Best for", value: size.bestFor },
-                { label: "Pot dia.", value: size.potDia },
-                { label: "Dispatch", value: size.dispatch },
-              ].map((stat, i) => (
-                <div key={stat.label} style={{
-                  padding: "8px 12px",
-                  borderRight: i < 3 ? "1px solid rgba(45,90,39,0.10)" : "none",
-                }}>
-                  <div style={{ fontFamily: "Poppins, sans-serif", fontWeight: 600, fontSize: "10px", textTransform: "uppercase", color: "var(--color-text-secondary)", letterSpacing: "0.05em", marginBottom: "4px" }}>{stat.label}</div>
-                  <div style={{ fontFamily: "Poppins, sans-serif", fontWeight: 600, fontSize: "13px", color: "var(--color-green-dark)" }}>{stat.value}</div>
-                </div>
-              ))}
-            </div>
+            {product?.product_type?.toLowerCase() === 'plant' && (
+              <div style={{
+                background: "white", border: "1.5px solid var(--color-green-pale)",
+                borderRadius: "var(--radius-md)", padding: "14px 18px", marginBottom: "20px",
+                display: "grid", gridTemplateColumns: "repeat(4, 1fr)",
+                gap: "0",
+              }}>
+                {[
+                  { label: "Height", value: activeSize.height },
+                  { label: "Best for", value: activeSize.bestFor },
+                  { label: "Pot dia.", value: activeSize.potDia },
+                  { label: "Dispatch", value: activeSize.dispatch },
+                ].map((stat, i) => (
+                  <div key={stat.label} style={{
+                    padding: "8px 12px",
+                    borderRight: i < 3 ? "1px solid rgba(45,90,39,0.10)" : "none",
+                  }}>
+                    <div style={{ fontFamily: "Poppins, sans-serif", fontWeight: 600, fontSize: "10px", textTransform: "uppercase", color: "var(--color-text-secondary)", letterSpacing: "0.05em", marginBottom: "4px" }}>{stat.label}</div>
+                    <div style={{ fontFamily: "Poppins, sans-serif", fontWeight: 600, fontSize: "13px", color: "var(--color-green-dark)" }}>{stat.value}</div>
+                  </div>
+                ))}
+              </div>
+            )}
 
             {/* Pot upsell strip */}
-            <div style={{
-              background: "var(--color-bg-secondary)", borderRadius: "var(--radius-md)",
-              padding: "14px 18px", marginBottom: "20px",
-            }}>
-              <p style={{ fontFamily: "Poppins, sans-serif", fontWeight: 600, fontSize: "11px", textTransform: "uppercase", color: "var(--color-text-secondary)", letterSpacing: "0.08em", marginBottom: "10px" }}>
-                Pair it with a pot
-              </p>
-              <div style={{ display: "flex", gap: "10px", overflowX: "auto", paddingBottom: "4px" }}>
-                {p.pots.map((pot) => (
+            {product?.product_type?.toLowerCase() === 'plant' && p.pots && p.pots.length > 0 && (
+              <div style={{
+                background: "var(--color-bg-secondary)", borderRadius: "var(--radius-md)",
+                padding: "14px 18px", marginBottom: "20px",
+              }}>
+                <p style={{ fontFamily: "Poppins, sans-serif", fontWeight: 600, fontSize: "11px", textTransform: "uppercase", color: "var(--color-text-secondary)", letterSpacing: "0.08em", marginBottom: "10px" }}>
+                  Pair it with a pot
+                </p>
+                <div style={{ display: "flex", gap: "10px", overflowX: "auto", paddingBottom: "4px" }}>
+                  {p.pots.map((pot) => (
+                    <Link
+                      key={pot.name}
+                      href={`/products/${pot.slug}`}
+                      style={{
+                        display: "flex", alignItems: "center", gap: "8px",
+                        background: "white", border: "1.5px solid rgba(45,90,39,0.15)",
+                        borderRadius: "var(--radius-full)", padding: "8px 16px",
+                        textDecoration: "none", flexShrink: 0,
+                        transition: "border-color 0.2s",
+                      }}
+                      onMouseEnter={(e) => (e.currentTarget.style.borderColor = "var(--color-green-mid)")}
+                      onMouseLeave={(e) => (e.currentTarget.style.borderColor = "rgba(45,90,39,0.15)")}
+                    >
+                      <span style={{ fontSize: "18px" }}>{pot.icon}</span>
+                      <div>
+                        <div style={{ fontFamily: "Poppins, sans-serif", fontWeight: 600, fontSize: "12px", color: "var(--color-text-primary)" }}>{pot.name}</div>
+                        <div style={{ fontFamily: "DM Sans, sans-serif", fontSize: "11px", color: "var(--color-green-mid)" }}>₹{pot.price}</div>
+                      </div>
+                    </Link>
+                  ))}
                   <Link
-                    key={pot.name}
-                    href={`/products/${pot.slug}`}
+                    href="/categories/pots"
                     style={{
-                      display: "flex", alignItems: "center", gap: "8px",
+                      display: "flex", alignItems: "center", gap: "6px",
                       background: "white", border: "1.5px solid rgba(45,90,39,0.15)",
                       borderRadius: "var(--radius-full)", padding: "8px 16px",
-                      textDecoration: "none", flexShrink: 0,
+                      textDecoration: "none", flexShrink: 0, color: "var(--color-green-mid)",
+                      fontFamily: "Poppins, sans-serif", fontWeight: 600, fontSize: "12px",
                       transition: "border-color 0.2s",
                     }}
                     onMouseEnter={(e) => (e.currentTarget.style.borderColor = "var(--color-green-mid)")}
                     onMouseLeave={(e) => (e.currentTarget.style.borderColor = "rgba(45,90,39,0.15)")}
                   >
-                    <span style={{ fontSize: "18px" }}>{pot.icon}</span>
-                    <div>
-                      <div style={{ fontFamily: "Poppins, sans-serif", fontWeight: 600, fontSize: "12px", color: "var(--color-text-primary)" }}>{pot.name}</div>
-                      <div style={{ fontFamily: "DM Sans, sans-serif", fontSize: "11px", color: "var(--color-green-mid)" }}>₹{pot.price}</div>
-                    </div>
+                    All Pots →
                   </Link>
-                ))}
-                <Link
-                  href="/categories/pots"
-                  style={{
-                    display: "flex", alignItems: "center", gap: "6px",
-                    background: "white", border: "1.5px solid rgba(45,90,39,0.15)",
-                    borderRadius: "var(--radius-full)", padding: "8px 16px",
-                    textDecoration: "none", flexShrink: 0, color: "var(--color-green-mid)",
-                    fontFamily: "Poppins, sans-serif", fontWeight: 600, fontSize: "12px",
-                    transition: "border-color 0.2s",
-                  }}
-                  onMouseEnter={(e) => (e.currentTarget.style.borderColor = "var(--color-green-mid)")}
-                  onMouseLeave={(e) => (e.currentTarget.style.borderColor = "rgba(45,90,39,0.15)")}
-                >
-                  All Pots →
-                </Link>
+                </div>
               </div>
-            </div>
+            )}
 
             {/* Qty + Wishlist */}
             <div style={{ display: "flex", alignItems: "center", gap: "14px", marginBottom: "20px" }}>
@@ -1070,33 +1170,51 @@ export default function ProductDetailPage({ params }: PageProps) {
               <button
                 id="add-to-cart-btn"
                 onClick={handleAddToCart}
-                disabled={isAddingItem}
+                disabled={isAddingItem || isCheckoutDisabled}
                 aria-busy={isAddingItem}
                 className="btn-primary"
-                style={{ width: "100%", justifyContent: "center", fontSize: "16px", padding: "16px 32px", opacity: isAddingItem ? 0.7 : 1 }}
+                style={{
+                  width: "100%", justifyContent: "center", fontSize: "16px", padding: "16px 32px",
+                  opacity: (isAddingItem || isCheckoutDisabled) ? 0.7 : 1,
+                  cursor: isCheckoutDisabled ? "not-allowed" : "pointer"
+                }}
               >
-                <CartIcon /> {isAddingItem ? "Adding to Cart..." : "Add to Cart"}
+                <CartIcon /> {isAddingItem
+                  ? "Adding to Cart..."
+                  : isCheckoutDisabled
+                  ? "Out of Stock"
+                  : isOutOfStock
+                  ? (stockPolicy === 'backorder' ? "Backorder" : "Pre-order")
+                  : "Add to Cart"}
               </button>
               <button
                 type="button"
                 id="buy-now-btn"
                 onClick={handleBuyNow}
+                disabled={isCheckoutDisabled}
                 style={{
                   width: "100%", display: "flex", alignItems: "center", justifyContent: "center",
                   fontFamily: "Poppins, sans-serif", fontWeight: 600, fontSize: "16px",
                   padding: "14px 32px", borderRadius: "var(--radius-xl)",
-                  border: "2px solid var(--color-green-dark)", color: "var(--color-green-dark)",
-                  background: "transparent", cursor: "pointer",
+                  border: `2px solid ${isCheckoutDisabled ? "var(--color-text-secondary)" : "var(--color-green-dark)"}`,
+                  color: isCheckoutDisabled ? "var(--color-text-secondary)" : "var(--color-green-dark)",
+                  background: "transparent",
+                  cursor: isCheckoutDisabled ? "not-allowed" : "pointer",
                   transition: "all 0.25s ease",
+                  opacity: isCheckoutDisabled ? 0.6 : 1,
                 }}
                 onMouseEnter={(e) => {
-                  e.currentTarget.style.background = "var(--color-green-pale)";
+                  if (!isCheckoutDisabled) e.currentTarget.style.background = "var(--color-green-pale)";
                 }}
                 onMouseLeave={(e) => {
-                  e.currentTarget.style.background = "transparent";
+                  if (!isCheckoutDisabled) e.currentTarget.style.background = "transparent";
                 }}
               >
-                Buy Now
+                {isCheckoutDisabled
+                  ? "Out of Stock"
+                  : isOutOfStock
+                  ? (stockPolicy === 'backorder' ? "Buy Now (Backorder)" : "Buy Now (Pre-order)")
+                  : "Buy Now"}
               </button>
             </div>
 
@@ -1160,7 +1278,7 @@ export default function ProductDetailPage({ params }: PageProps) {
         {/* ── Tabs ── */}
         <div className="pdp-tabs-wrap">
           <div className="pdp-tab-bar" role="tablist">
-            {(["about", "care", "reviews"] as const).map((tab) => (
+            {(p.careGuide && p.careGuide.length > 0 ? (["about", "care", "reviews"] as const) : (["about", "reviews"] as const)).map((tab) => (
               <button
                 key={tab}
                 role="tab"
@@ -1169,7 +1287,11 @@ export default function ProductDetailPage({ params }: PageProps) {
                 className={`pdp-tab-btn${activeTab === tab ? " active" : ""}`}
                 onClick={() => setActiveTab(tab)}
               >
-                {tab === "about" ? "About This Plant" : tab === "care" ? "Care Guide" : `Reviews (${p.reviewCount})`}
+                {tab === "about"
+                  ? (product?.product_type?.toLowerCase() === "plant" ? "About This Plant" : "About Product")
+                  : tab === "care"
+                  ? "Care Guide"
+                  : `Reviews (${p.reviewCount})`}
               </button>
             ))}
           </div>
@@ -1201,7 +1323,7 @@ export default function ProductDetailPage({ params }: PageProps) {
               <div style={{ borderRadius: "var(--radius-md)", overflow: "hidden", boxShadow: "var(--shadow-card)" }}>
                 <div style={{ background: "var(--color-green-dark)", padding: "16px 20px" }}>
                   <h3 style={{ fontFamily: "Poppins, sans-serif", fontWeight: 700, fontSize: "16px", color: "white", margin: 0 }}>
-                    Plant Specifications
+                    {product?.product_type?.toLowerCase() === "plant" ? "Plant Specifications" : "Product Specifications"}
                   </h3>
                 </div>
                 <div style={{ background: "white" }}>

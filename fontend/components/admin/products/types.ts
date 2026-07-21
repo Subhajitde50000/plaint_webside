@@ -10,6 +10,7 @@ export interface ProductImage {
   url: string;
   filename: string;
   isPrimary: boolean;
+  file?: File;
 }
 
 export interface SizeVariant {
@@ -190,7 +191,7 @@ export const LIGHT_OPTIONS = ['Full Sun', 'Partial Sun', 'Indirect Bright Light'
 export const WATER_OPTIONS = ['Daily', 'Every 2–3 days', 'Weekly', 'Bi-weekly', 'Monthly'];
 export const SKILL_OPTIONS = ['Beginner', 'Intermediate', 'Expert'];
 export const TAX_OPTIONS = ['GST 5%', 'GST 12%', 'GST 18%', 'GST 28%', 'Exempt'];
-export const WAREHOUSE_OPTIONS = ['Pune Fulfilment Centre', 'Mumbai Warehouse', 'Delhi Hub', 'Bangalore Depot'];
+export const WAREHOUSE_OPTIONS = ['Kolkata Warehouse'];
 
 export const DEFAULT_FORM_DATA: ProductFormData = {
   title: '',
@@ -215,7 +216,7 @@ export const DEFAULT_FORM_DATA: ProductFormData = {
   reorderLevel: '20',
   lowStockAlert: true,
   stockPolicy: 'deny',
-  warehouse: 'Pune Fulfilment Centre',
+  warehouse: 'Kolkata Warehouse',
   isPhysical: true,
   weight: '',
   weightUnit: 'kg',

@@ -69,7 +69,20 @@ export interface ApiProduct {
   rating_count: number;
   status: string;
   images: { id: number; url: string; alt_text?: string; position: number; is_primary: boolean }[];
-  variants: { id: number; option_name: string; price: number; sku: string; is_active: boolean }[];
+  variants: {
+    id: number;
+    option_name: string;
+    price: number;
+    sku: string;
+    is_active: boolean;
+    inventory?: {
+      quantity: number;
+      reserved: number;
+      reorder_level: number;
+      low_stock_alert: boolean;
+      stock_policy: "deny" | "backorder" | "continue";
+    };
+  }[];
 }
 
 export interface ApiProductDetail {
@@ -113,6 +126,13 @@ export interface ApiProductDetail {
     compare_at_price?: number;
     sku: string;
     is_active: boolean;
+    inventory?: {
+      quantity: number;
+      reserved: number;
+      reorder_level: number;
+      low_stock_alert: boolean;
+      stock_policy: "deny" | "backorder" | "continue";
+    };
   }[];
   care_cards: { id: number; icon?: string; title: string; value: string; detail?: string; difficulty_level: number }[];
   features: { feature: string }[];
