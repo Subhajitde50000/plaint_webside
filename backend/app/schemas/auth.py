@@ -55,3 +55,14 @@ class AdminLoginResponse(BaseModel):
     admin_uuid: str
     first_name: str
     last_name: str
+
+
+class AdminUserResponse(BaseModel):
+    uuid: str
+    email: EmailStr
+    first_name: str
+    last_name: str
+    role: str
+    is_active: bool
+    avatar_url: Optional[str] = None
+

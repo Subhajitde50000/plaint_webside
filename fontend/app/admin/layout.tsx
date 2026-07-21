@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState, useEffect, useRef, useCallback } from "react";
+import { useAdminAuth } from "@/features/admin/hooks/useAdminAuth";
 
 /* ════════════════════════════════════════════
    SVG Icon Library
@@ -555,6 +556,10 @@ function NotificationPanel({ onClose }: { onClose: () => void }) {
 ════════════════════════════════════════════ */
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const isLoginPage = pathname === "/admin/login";
+
+  const { admin, logout } = useAdminAuth(!isLoginPage);
+
   const [collapsed, setCollapsed] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
@@ -570,12 +575,14 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   }, []);
 
   useEffect(() => {
+    if (isLoginPage) return;
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [handleKeyDown]);
+  }, [handleKeyDown, isLoginPage]);
 
   // Close user menu on outside click
   useEffect(() => {
+    if (isLoginPage) return;
     const handler = (e: MouseEvent) => {
       if (userMenuRef.current && !userMenuRef.current.contains(e.target as Node)) {
         setUserMenuOpen(false);
@@ -583,7 +590,20 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     };
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
-  }, []);
+  }, [isLoginPage]);
+
+  if (isLoginPage) {
+    return <>{children}</>;
+  }
+
+  const adminName = admin ? `${admin.first_name} ${admin.last_name}` : "Admin User";
+  const adminInitials = admin
+    ? `${admin.first_name?.[0] || ""}${admin.last_name?.[0] || ""}`.toUpperCase() || "AD"
+    : "AD";
+  const adminRoleFormatted = admin?.role
+    ? admin.role.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())
+    : "Administrator";
+
 
   const sidebarWidth = collapsed ? "56px" : "240px";
 
@@ -729,10 +749,10 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                 display: "flex", alignItems: "center", justifyContent: "center",
                 color: "var(--admin-accent)", fontSize: "11px", fontWeight: 700,
                 flexShrink: 0,
-              }}>PK</div>
+              }}>{adminInitials}</div>
               <div style={{ textAlign: "left" }}>
-                <div style={{ fontSize: "12px", fontWeight: 600, color: "var(--admin-text)", whiteSpace: "nowrap" }}>Priya K.</div>
-                <div style={{ fontSize: "10px", color: "var(--admin-text-muted)", whiteSpace: "nowrap" }}>Super Admin</div>
+                <div style={{ fontSize: "12px", fontWeight: 600, color: "var(--admin-text)", whiteSpace: "nowrap" }}>{adminName}</div>
+                <div style={{ fontSize: "10px", color: "var(--admin-text-muted)", whiteSpace: "nowrap" }}>{adminRoleFormatted}</div>
               </div>
               <span style={{ color: "var(--admin-text-muted)", display: "flex" }}><Icon.ChevronDown /></span>
             </button>
@@ -778,6 +798,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                 <div style={{ borderTop: "1px solid var(--admin-border-muted)", margin: "4px 0" }} />
                 <button
                   role="menuitem"
+                  onClick={logout}
                   style={{
                     width: "100%", display: "flex", alignItems: "center", gap: "10px",
                     padding: "10px 14px", background: "transparent", border: "none",
@@ -790,6 +811,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                   <span style={{ display: "flex" }}><Icon.LogOut /></span>
                   Sign Out
                 </button>
+
               </div>
             )}
           </div>
