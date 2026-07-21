@@ -12,7 +12,7 @@ import {
 import { uploadProductImageApi } from '@/features/admin/api/admin-products.api';
 
 // Types
-import { ProductFormData, ValidationErrors, DEFAULT_FORM_DATA, ProductStatus, ProductType, StockPolicy } from './types';
+import { ProductFormData, ValidationErrors, DEFAULT_FORM_DATA, ProductStatus, ProductType } from './types';
 
 // Left column panels
 import { ProductInfoPanel } from './panels/ProductInfoPanel';
@@ -136,9 +136,6 @@ export function ProductEditPage({ mode, productId, initialData }: Props) {
   // Populate data when loaded from backend API in edit mode
   useEffect(() => {
     if (fetchedProduct && !isNew) {
-      const firstVariant = fetchedProduct.variants?.[0];
-      const firstInventory = firstVariant?.inventory;
-
       setData(prev => ({
         ...prev,
         title: fetchedProduct.title || '',
@@ -165,24 +162,6 @@ export function ProductEditPage({ mode, productId, initialData }: Props) {
         })),
         seoTitle: fetchedProduct.seo_title || '',
         seoDescription: fetchedProduct.seo_description || '',
-        variants: (fetchedProduct.variants || []).map((v: any) => ({
-          id: String(v.id),
-          sizeName: v.option_name,
-          range: v.option_detail || '',
-          price: String(v.price),
-          sku: v.sku,
-          stock: v.inventory ? v.inventory.quantity : 0,
-          bestFor: v.best_for || '',
-          potDiameter: v.pot_diameter || '',
-          dispatch: v.dispatch_time || '',
-        })),
-        baseSku: firstVariant?.sku || '',
-        barcode: firstVariant?.barcode || '',
-        trackInventory: firstInventory ? true : false,
-        reorderLevel: firstInventory ? String(firstInventory.reorder_level) : '10',
-        lowStockAlert: firstInventory ? Boolean(firstInventory.low_stock_alert) : true,
-        stockPolicy: firstInventory ? (firstInventory.stock_policy as StockPolicy) : 'deny',
-        warehouse: 'Kolkata Warehouse',
       }));
       setIsDirty(false);
     }
@@ -227,26 +206,6 @@ export function ProductEditPage({ mode, productId, initialData }: Props) {
       isAirPurifying: data.airPurifying,
       seoTitle: data.seoTitle,
       seoDescription: data.seoDescription,
-      
-      // Seed/update variants and inventory
-      variants: data.variants.map(v => ({
-        id: v.id.startsWith('new-') ? undefined : Number(v.id),
-        option_name: v.sizeName,
-        option_detail: v.range,
-        price: Number(v.price),
-        sku: v.sku,
-        stock: v.stock,
-        best_for: v.bestFor,
-        pot_diameter: v.potDiameter,
-        dispatch_time: v.dispatch,
-      })),
-      base_sku: data.baseSku,
-      barcode: data.barcode,
-      track_inventory: data.trackInventory,
-      reorder_level: Number(data.reorderLevel || 10),
-      low_stock_alert: data.lowStockAlert,
-      stock_policy: data.stockPolicy,
-      warehouse: data.warehouse,
     };
 
     if (isNew) {

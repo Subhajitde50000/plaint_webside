@@ -150,20 +150,6 @@ class ProductDetailResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
-class VariantInputSchema(BaseModel):
-    id: Optional[int] = None
-    option_name: str
-    option_detail: Optional[str] = None
-    price: Decimal
-    compare_at_price: Optional[Decimal] = None
-    sku: str
-    stock: int = 0
-    best_for: Optional[str] = None
-    pot_diameter: Optional[str] = None
-    dispatch_time: Optional[str] = None
-    is_active: bool = True
-
-
 class CreateProductRequest(BaseModel):
     category_id: int
     product_type: str
@@ -180,14 +166,6 @@ class CreateProductRequest(BaseModel):
     is_pet_friendly: Optional[bool] = None
     is_air_purifying: Optional[bool] = None
     status: str = "draft"
-    variants: Optional[List[VariantInputSchema]] = None
-    base_sku: Optional[str] = None
-    barcode: Optional[str] = None
-    track_inventory: Optional[bool] = None
-    reorder_level: Optional[int] = None
-    low_stock_alert: Optional[bool] = None
-    stock_policy: Optional[str] = None
-    warehouse: Optional[str] = None
 
 
 class UpdateProductRequest(BaseModel):
@@ -201,11 +179,3 @@ class UpdateProductRequest(BaseModel):
     care_skill: Optional[str] = None
     is_pet_friendly: Optional[bool] = None
     is_air_purifying: Optional[bool] = None
-    variants: Optional[List[VariantInputSchema]] = None
-    base_sku: Optional[str] = None
-    barcode: Optional[str] = None
-    track_inventory: Optional[bool] = None
-    reorder_level: Optional[int] = None
-    low_stock_alert: Optional[bool] = None
-    stock_policy: Optional[str] = None
-    warehouse: Optional[str] = None
