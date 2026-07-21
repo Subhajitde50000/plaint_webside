@@ -1,3 +1,4 @@
+import uuid
 import random
 import string
 from datetime import datetime, timezone
@@ -7,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.models.order import Order, OrderItem, OrderStatusHistory
 from app.models.cart import Cart, CartItem
+from app.models.product import ProductVariant
 from app.models.inventory import Inventory
 from app.models.discount import Discount, DiscountUsage
 from app.models.loyalty import LoyaltyAccount
@@ -25,15 +27,36 @@ class OrderService:
     def create_order(self, user: User, payload: CreateOrderRequest) -> Order:
         db = self.db
 
-        # 1. Validate and load cart items
-        cart = db.query(Cart).filter(Cart.user_id == user.id).first()
-        if not cart or not cart.items:
-            raise ValueError("Cart is empty.")
 
-        # 2. Calculate subtotal
-        subtotal = sum(
-            float(item.price_at_add) * item.quantity for item in cart.items
-        )
+        is_buy_now = payload.buy_now_variant_id is not None
+        order_items_data = []
+
+        # 1. Validate and load items (either buy-now variant or cart items)
+        if is_buy_now:
+            variant = db.query(ProductVariant).filter(ProductVariant.id == payload.buy_now_variant_id).first()
+            if not variant:
+                raise ValueError("Selected product variant not found.")
+            qty = payload.buy_now_quantity or 1
+            unit_price = float(variant.price)
+            order_items_data.append({
+                "variant": variant,
+                "quantity": qty,
+                "price": unit_price,
+            })
+            subtotal = unit_price * qty
+        else:
+            cart = db.query(Cart).filter(Cart.user_id == user.id).first()
+            if not cart or not cart.items:
+                raise ValueError("Cart is empty.")
+            for item in cart.items:
+                order_items_data.append({
+                    "variant": item.variant,
+                    "quantity": item.quantity,
+                    "price": float(item.price_at_add),
+                })
+            subtotal = sum(item["price"] * item["quantity"] for item in order_items_data)
+
+        
         discount_amount = 0.00
         discount_id = None
         discount_code = None
@@ -41,7 +64,7 @@ class OrderService:
         # 3. Apply discount code
         if payload.discount_code:
             discount = self._validate_discount(payload.discount_code, user, subtotal)
-            discount_amount = self._calculate_discount(discount, cart.items, subtotal)
+            discount_amount = self._calculate_discount(discount, order_items_data, subtotal)
             discount_id = discount.id
             discount_code = payload.discount_code.upper()
 
@@ -72,6 +95,7 @@ class OrderService:
 
         # 6. Create order record
         order = Order(
+            uuid=str(uuid.uuid4()),
             order_number=self.generate_order_number(),
             user_id=user.id,
             subtotal=subtotal,
@@ -91,9 +115,9 @@ class OrderService:
         db.add(order)
         db.flush()  # get order.id
 
-        # 7. Create order items from cart
-        for cart_item in cart.items:
-            variant = cart_item.variant
+        # 7. Create order items
+        for item in order_items_data:
+            variant = item["variant"]
             product = variant.product
             primary_image = next(
                 (img.url for img in product.images if img.is_primary), None
@@ -101,36 +125,39 @@ class OrderService:
 
             db.add(OrderItem(
                 order_id=order.id,
-                variant_id=cart_item.variant_id,
+                variant_id=variant.id,
                 product_id=product.id,
                 title=product.title,
                 variant_title=variant.option_name,
                 sku=variant.sku,
-                quantity=cart_item.quantity,
-                unit_price=cart_item.price_at_add,
+                quantity=item["quantity"],
+                unit_price=item["price"],
                 compare_at_price=variant.compare_at_price,
-                total_price=float(cart_item.price_at_add) * cart_item.quantity,
+                total_price=item["price"] * item["quantity"],
                 image_url=primary_image,
             ))
 
-        # 8. Reserve inventory (SELECT FOR UPDATE prevents race conditions)
-        for cart_item in cart.items:
+        print(f'\n \n {user.__dict__} \n \n')
+        print(f'\n \n {payload} \n \n')
+        # 8. Reserve inventory
+        for item in order_items_data:
+            variant = item["variant"]
             inventory = db.query(Inventory).filter(
-                Inventory.variant_id == cart_item.variant_id
+                Inventory.variant_id == variant.id
             ).with_for_update().first()
 
             if not inventory:
                 db.rollback()
-                raise ValueError(f"No inventory record for variant {cart_item.variant_id}")
+                raise ValueError(f"No inventory record for variant {variant.id}")
 
             available = inventory.quantity - inventory.reserved
-            if available < cart_item.quantity:
+            if available < item["quantity"]:
                 db.rollback()
                 raise ValueError(
-                    f"Insufficient stock for '{cart_item.variant.product.title}'. "
+                    f"Insufficient stock for '{variant.product.title}'. "
                     f"Only {available} available."
                 )
-            inventory.reserved += cart_item.quantity
+            inventory.reserved += item["quantity"]
 
         # 9. Initial status history
         db.add(OrderStatusHistory(

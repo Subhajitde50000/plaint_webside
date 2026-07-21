@@ -293,7 +293,7 @@ export default function PlpProductCard({
         >
           <div>
             <Link
-              href={`/plants/${product.slug}`}
+              href={`/products/${product.slug}`}
               aria-label={`View ${product.name}`}
               style={{
                 display: "block",
@@ -460,7 +460,7 @@ export default function PlpProductCard({
           }}
         >
           <Link
-            href={`/plants/${product.slug}`}
+            href={`/products/${product.slug}`}
             aria-label={`View ${product.name}`}
             tabIndex={-1}
             style={{ display: "block", width: "100%", height: "100%" }}
@@ -648,7 +648,7 @@ export default function PlpProductCard({
         >
           {/* Name */}
           <Link
-            href={`/plants/${product.slug}`}
+            href={`/products/${product.slug}`}
             aria-label={`View ${product.name}`}
             style={{
               fontFamily: "Outfit, sans-serif",

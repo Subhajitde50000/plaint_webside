@@ -17,20 +17,48 @@ router = APIRouter(prefix="/products", tags=["Products"])
 async def list_products(
     db: Session = Depends(get_db),
     page: int = Query(1, ge=1),
-    page_size: int = Query(24, ge=1, le=100),
+    page_size: int = Query(20, ge=1, le=100),
+    # Category — accept slug (preferred) or legacy id
+    category_slug: Optional[str] = None,
     category_id: Optional[int] = None,
+    # Collection
+    collection_slug: Optional[str] = None,
+    # Filters
     product_type: Optional[str] = None,
     min_price: Optional[float] = None,
     max_price: Optional[float] = None,
     care_skill: Optional[str] = None,
     is_pet_friendly: Optional[bool] = None,
     is_air_purifying: Optional[bool] = None,
-    sort: str = Query("newest", enum=["newest", "price_asc", "price_desc", "rating"]),
+    # Full-text search
+    q: Optional[str] = None,
+    # Sort
+    sort: str = Query(
+        "popularity",
+        enum=["popularity", "newest", "price_asc", "price_desc", "rating", "name_asc"],
+    ),
 ):
     query = db.query(Product).filter(Product.status == "active")
 
-    if category_id:
+    # ── Category filter ────────────────────────────────────────────────────
+    if category_slug:
+        query = query.join(Category, Product.category_id == Category.id).filter(
+            Category.slug == category_slug
+        )
+    elif category_id:
         query = query.filter(Product.category_id == category_id)
+
+    # ── Collection filter ──────────────────────────────────────────────────
+    if collection_slug:
+        from app.models.category import Collection, ProductCollection
+        query = (
+            query
+            .join(ProductCollection, Product.id == ProductCollection.product_id)
+            .join(Collection, ProductCollection.collection_id == Collection.id)
+            .filter(Collection.slug == collection_slug)
+        )
+
+    # ── Product type / price / care filters ───────────────────────────────
     if product_type:
         query = query.filter(Product.product_type == product_type)
     if min_price is not None:
@@ -44,13 +72,25 @@ async def list_products(
     if is_air_purifying is not None:
         query = query.filter(Product.is_air_purifying == is_air_purifying)
 
+    # ── Full-text search ───────────────────────────────────────────────────
+    if q:
+        pattern = f"%{q.strip()}%"
+        query = query.filter(
+            Product.title.ilike(pattern) | Product.short_description.ilike(pattern)
+        )
+
+    # ── Sorting ────────────────────────────────────────────────────────────
     if sort == "price_asc":
         query = query.order_by(Product.base_price.asc())
     elif sort == "price_desc":
         query = query.order_by(Product.base_price.desc())
     elif sort == "rating":
         query = query.order_by(Product.rating_average.desc())
-    else:
+    elif sort == "name_asc":
+        query = query.order_by(Product.title.asc())
+    elif sort == "popularity":
+        query = query.order_by(Product.rating_count.desc(), Product.rating_average.desc())
+    else:  # newest
         query = query.order_by(Product.published_at.desc())
 
     result = paginate(query, page, page_size)

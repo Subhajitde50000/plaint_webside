@@ -1,3 +1,5 @@
+from pprint import pprint
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
@@ -18,6 +20,7 @@ router = APIRouter(prefix="/customers", tags=["Customers"])
 
 @router.get("/me", response_model=CustomerProfile)
 async def get_my_profile(user: User = Depends(get_current_user)):
+    # pprint(user.__dict__)
     return user
 
 
@@ -27,7 +30,13 @@ async def update_profile(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    for field, val in payload.model_dump(exclude_none=True).items():
+    print(f'\n\nUpdating profile for user {user.id} with payload: {payload}\n\n')
+    # Exclude None AND empty strings so DATE/ENUM columns don't receive invalid values
+    updates = {
+        k: v for k, v in payload.model_dump(exclude_none=True).items()
+        if v != ""
+    }
+    for field, val in updates.items():
         setattr(user, field, val)
     db.commit()
     return {"message": "Profile updated."}
@@ -48,6 +57,8 @@ async def add_address(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
+    print(payload)
+    
     if payload.is_default:
         db.query(Address).filter(Address.user_id == user.id).update({"is_default": False})
 
@@ -183,6 +194,7 @@ async def add_plant(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
+    pprint.pprint(f'\n\nAdding plant for user {user.id} with payload: {payload}\n\n')
     plant = UserPlant(user_id=user.id, **payload.model_dump())
     db.add(plant)
     db.commit()

@@ -1,3 +1,8 @@
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+import smtplib
+import asyncio
+
 import httpx
 from app.config import settings
 
@@ -6,30 +11,76 @@ class NotificationService:
 
     KLAVIYO_BASE = "https://a.klaviyo.com/api"
 
-    # ── Email via Klaviyo ────────────────────────────────────────────
+    # ── Email via Google ────────────────────────────────────────────
     async def send_email(self, to_email: str, template_id: str, props: dict):
+        """
+        Sends an email using Google SMTP.
+        Uses asyncio.to_thread to run synchronous smtplib in a separate thread.
+        """
         try:
-            async with httpx.AsyncClient(timeout=15) as client:
-                await client.post(
-                    f"{self.KLAVIYO_BASE}/events/",
-                    headers={
-                        "Authorization": f"Klaviyo-API-Key {settings.KLAVIYO_API_KEY}",
-                        "Content-Type": "application/json",
-                    },
-                    json={
-                        "data": {
-                            "type": "event",
-                            "attributes": {
-                                "profile": {"$email": to_email},
-                                "metric": {"name": template_id},
-                                "properties": props,
-                            },
-                        }
-                    },
-                )
+            # 1. Prepare the email metadata
+            subject = template_id.replace("_", " ").title()
+            
+            # 2. Simple Template Rendering 
+            # (In production, consider using Jinja2 for complex templates)
+            html_content = self._render_simple_template(template_id, props)
+
+            # 3. Construct the MIME message
+            msg = MIMEMultipart()
+            msg["From"] = f"{settings.EMAILS_FROM_NAME} <{settings.EMAILS_FROM_EMAIL}>"
+            msg["To"] = to_email
+            msg["Subject"] = subject
+            msg.attach(MIMEText(html_content, "html"))
+
+            # 4. Synchronous sending function
+            def _send_sync():
+                with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT) as server:
+                    server.starttls()  # Upgrade to secure connection
+                    server.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
+                    server.send_message(msg)
+
+            # 5. Execute in thread pool to avoid blocking FastAPI
+            await asyncio.to_thread(_send_sync)
+            print(f"\n \n [NotificationService] Email sent to {to_email} with template '{template_id}'")
+            
         except Exception as e:
-            # Log but don't raise — notification failure must not break orders
-            print(f"[NotificationService] Email send failed: {e}")
+            # Log failure but don't crash the request (notifications are usually side-effects)
+            print(f"[NotificationService] SMTP Error: {e}")
+
+    def _render_simple_template(self, template_id: str, props: dict) -> str:
+        """Basic fallback HTML generator"""
+        if template_id == "order_confirmed":
+            return f"<h1>Order Confirmed!</h1><p>Hi {props.get('first_name')}, your order #{props.get('order_number')} is being processed.</p>"
+        elif template_id == "email_verification":
+            return f"<h1>Verify Email</h1><p>Your token: <strong>{props.get('verification_token')}</strong></p>"
+        
+        return f"<p>Notification: {template_id}</p><pre>{props}</pre>"
+
+
+    # ── Email via Klaviyo ────────────────────────────────────────────
+    # async def send_email(self, to_email: str, template_id: str, props: dict):
+    #     try:
+    #         async with httpx.AsyncClient(timeout=15) as client:
+    #             await client.post(
+    #                 f"{self.KLAVIYO_BASE}/events/",
+    #                 headers={
+    #                     "Authorization": f"Klaviyo-API-Key {settings.KLAVIYO_API_KEY}",
+    #                     "Content-Type": "application/json",
+    #                 },
+    #                 json={
+    #                     "data": {
+    #                         "type": "event",
+    #                         "attributes": {
+    #                             "profile": {"$email": to_email},
+    #                             "metric": {"name": template_id},
+    #                             "properties": props,
+    #                         },
+    #                     }
+    #                 },
+    #             )
+    #     except Exception as e:
+    #         # Log but don't raise — notification failure must not break orders
+    #         print(f"[NotificationService] Email send failed: {e}")
 
     # ── SMS via MSG91 ────────────────────────────────────────────────
     async def send_sms(self, phone: str, message: str):

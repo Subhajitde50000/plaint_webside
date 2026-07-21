@@ -2,10 +2,16 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from contextlib import asynccontextmanager
+from pathlib import Path
+import sys
 import structlog
 
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
 from app.config import settings
-from app.database import engine
+# from app.database import engine
 from app.api.router import api_router
 
 logger = structlog.get_logger()

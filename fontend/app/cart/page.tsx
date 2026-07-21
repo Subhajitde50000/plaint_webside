@@ -3,6 +3,9 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import SharedNavbar from "@/components/Navbar";
+import { useCart } from "@/features/cart/hooks/useCart";
+import { useAuthStore } from "@/store/auth.store";
+import { useCheckoutStore } from "@/store/checkout.store";
 
 /* ── Design Tokens ─────────────────────────────────────── */
 const T = {
@@ -39,38 +42,24 @@ interface CartItem {
 }
 
 export default function CartPage() {
-  const [cartItems, setCartItems] = useState<CartItem[]>([
-    {
-      id: 1,
-      name: "Monstera Deliciosa",
-      category: "Indoor Plant",
-      price: 25.00,
-      quantity: 1,
-      img: "/monstera.png",
-      options: "Medium size · White Ceramic Pot",
-    },
-    {
-      id: 2,
-      name: "Wildflower Seeds Mix",
-      category: "Seeds",
-      price: 18.00,
-      quantity: 2,
-      img: "/cat-flowers.png",
-      options: "Pack of 3 · Premium Blend",
-    },
-    {
-      id: 3,
-      name: "Moisture Meter Pro",
-      category: "Tools",
-      price: 15.00,
-      quantity: 1,
-      img: "/product-spray.png", // fallback placeholder for tool spray/moisture meter
-      options: "Digital Probe · Battery Included",
-    },
-  ]);
+  const {
+    cart,
+    isLoading,
+    updateItem,
+    removeItem,
+    applyDiscount,
+    removeDiscount,
+  } = useCart();
+
+  const { isAuthenticated } = useAuthStore();
 
   const [promoInput, setPromoInput] = useState("");
-  const [discountPercent, setDiscountPercent] = useState(0);
+  const [appliedDiscount, setAppliedDiscount] = useState<{
+    code: string;
+    discount_type: "percentage" | "fixed";
+    value: number;
+  } | null>(null);
+
   const [promoError, setPromoError] = useState("");
   const [promoSuccess, setPromoSuccess] = useState("");
   const [mounted, setMounted] = useState(false);
@@ -79,52 +68,124 @@ export default function CartPage() {
     setMounted(true);
   }, []);
 
-  // Handlers
-  const updateQuantity = (id: number, delta: number) => {
-    setCartItems(prev =>
-      prev.map(item => {
-        if (item.id === id) {
-          const newQty = item.quantity + delta;
-          return { ...item, quantity: newQty < 1 ? 1 : newQty };
-        }
-        return item;
-      })
-    );
+  const handleUpdateQuantity = (itemId: number, currentQty: number, delta: number) => {
+    const newQty = currentQty + delta;
+    if (newQty <= 0) {
+      removeItem(String(itemId));
+    } else {
+      updateItem({ itemId: String(itemId), quantity: newQty });
+    }
   };
 
-  const removeItem = (id: number) => {
-    // We could add an exit animation here
-    setCartItems(prev => prev.filter(item => item.id !== id));
+  const handleRemoveItem = (itemId: number) => {
+    removeItem(String(itemId));
   };
 
-  const applyPromo = (e: React.FormEvent) => {
+  const handleApplyPromo = (e: React.FormEvent) => {
     e.preventDefault();
     setPromoError("");
     setPromoSuccess("");
 
-    if (promoInput.trim().toUpperCase() === "GREENTHUMB") {
-      setDiscountPercent(10);
-      setPromoSuccess("10% discount applied successfully!");
-    } else if (promoInput.trim() === "") {
+    if (!promoInput.trim()) {
       setPromoError("Please enter a coupon code.");
-    } else {
-      setPromoError("Invalid promo code. Try 'GREENTHUMB'.");
+      return;
     }
+
+    applyDiscount(promoInput.trim(), {
+      onSuccess: (data: any) => {
+        setAppliedDiscount({
+          code: data.code,
+          discount_type: data.discount_type,
+          value: Number(data.value),
+        });
+        setPromoSuccess(`Coupon "${data.code}" applied!`);
+      },
+      onError: (err: any) => {
+        const detail = err?.response?.data?.detail || "Invalid or expired discount code.";
+        setPromoError(detail);
+        setAppliedDiscount(null);
+      }
+    });
   };
 
+  const handleRemovePromo = () => {
+    removeDiscount(undefined, {
+      onSuccess: () => {
+        setAppliedDiscount(null);
+        setPromoInput("");
+        setPromoSuccess("");
+        setPromoError("");
+      }
+    });
+  };
+
+  // Map API response items to the UI layout
+  const cartItems: CartItem[] = (cart?.items ?? []).map((item: any) => ({
+    id: item.id,
+    name: item.product_title || "Product",
+    category: "Storefront Item",
+    price: Number(item.price_at_add),
+    quantity: item.quantity,
+    img: item.image_url || "/placeholder-plant.jpg",
+    options: item.variant_title || "Standard size",
+  }));
+
   // Calculations
-  const subtotal = cartItems.reduce((acc, item) => acc + item.price * item.quantity, 0);
-  const discountAmount = (subtotal * discountPercent) / 100;
-  const postDiscountSubtotal = subtotal - discountAmount;
+  const subtotal = Number(cart?.subtotal ?? 0);
   
-  // Free shipping over $50 after discount, otherwise $5.00
-  const shippingFee = postDiscountSubtotal >= 50 || cartItems.length === 0 ? 0 : 5.00;
-  
+  let discountAmount = 0;
+  if (appliedDiscount) {
+    if (appliedDiscount.discount_type === "percentage") {
+      discountAmount = (subtotal * appliedDiscount.value) / 100;
+    } else {
+      discountAmount = appliedDiscount.value;
+    }
+  }
+
+  const postDiscountSubtotal = Math.max(0, subtotal - discountAmount);
+  // Free shipping over ₹500, otherwise ₹49 shipping fee
+  const shippingFee = postDiscountSubtotal >= 500 || cartItems.length === 0 ? 0 : 49;
   // Tax 8%
   const taxAmount = postDiscountSubtotal * 0.08;
-  
   const total = postDiscountSubtotal + shippingFee + taxAmount;
   const totalCartCount = cartItems.reduce((acc, item) => acc + item.quantity, 0);
+
+  if (!mounted) return null;
+
+  if (!isAuthenticated) {
+    return (
+      <>
+        <SharedNavbar />
+        <div style={{ background: T.bg, minHeight: "100vh", fontFamily: "Outfit, sans-serif", paddingTop: "64px" }}>
+          <div className="scale-in" style={{ background: T.bgCard, borderRadius: 24, border: `1px solid ${T.border}`, padding: "80px 24px", textAlign: "center", boxShadow: T.shadow, maxWidth: 600, margin: "80px auto 0" }}>
+            <div style={{ width: 80, height: 80, borderRadius: "50%", background: T.greenPale, color: T.green, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 20px", fontSize: 36 }}>
+              🔐
+            </div>
+            <h2 style={{ fontFamily: "'Outfit', sans-serif", fontWeight: 700, fontSize: 22, color: T.heading, marginBottom: 8 }}>
+              Please log in
+            </h2>
+            <p style={{ fontSize: 14, color: T.muted, maxWidth: 320, margin: "0 auto 24px", lineHeight: 1.5 }}>
+              You need to log in to view your shopping cart and complete your purchase.
+            </p>
+            <Link href="/login?returnTo=/cart" className="green-btn" style={{ textDecoration: "none" }}>
+              Log In to View Cart
+            </Link>
+          </div>
+        </div>
+      </>
+    );
+  }
+
+  if (isLoading) {
+    return (
+      <>
+        <SharedNavbar />
+        <div style={{ display: "flex", justifyContent: "center", alignItems: "center", minHeight: "100vh", fontFamily: "Outfit, sans-serif", fontSize: 16 }}>
+          Loading your cart...
+        </div>
+      </>
+    );
+  }
 
   return (
     <div style={{ background: T.bg, minHeight: "100vh", fontFamily: "Outfit, sans-serif", paddingTop: "64px" }}>
@@ -304,7 +365,7 @@ export default function CartPage() {
       `}</style>
 
       {/* Navbar header */}
-      <SharedNavbar cartCount={totalCartCount} />
+      <SharedNavbar />
 
       {/* Main Content */}
       <div style={{ maxWidth: 1200, margin: "0 auto", padding: "40px 24px" }} className="cart-main-container fade-up">
@@ -343,18 +404,18 @@ export default function CartPage() {
                   {/* Quantity controls and price */}
                   <div className="qty-actions-row" style={{ display: "flex", alignItems: "center", gap: 24, flexShrink: 0 }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                      <button className="qty-btn" aria-label="Decrease quantity" onClick={() => updateQuantity(item.id, -1)}>-</button>
+                      <button className="qty-btn" aria-label="Decrease quantity" onClick={() => handleUpdateQuantity(item.id, item.quantity, -1)}>-</button>
                       <span style={{ fontSize: 15, fontWeight: 600, width: 20, textAlign: "center" }}>{item.quantity}</span>
-                      <button className="qty-btn" aria-label="Increase quantity" onClick={() => updateQuantity(item.id, 1)}>+</button>
+                      <button className="qty-btn" aria-label="Increase quantity" onClick={() => handleUpdateQuantity(item.id, item.quantity, 1)}>+</button>
                     </div>
 
-                    <div style={{ minWidth: 80, textAlign: "right" }}>
+                    <div style={{ minWidth: 100, textAlign: "right" }}>
                       <p style={{ fontFamily: "'Outfit', sans-serif", fontWeight: 700, fontSize: 17, color: T.heading }}>
-                        ${(item.price * item.quantity).toFixed(2)}
+                        ₹{(item.price * item.quantity).toLocaleString("en-IN")}
                       </p>
                       {item.quantity > 1 && (
                         <p style={{ fontSize: 11, color: T.muted, marginTop: 2 }}>
-                          ${item.price.toFixed(2)} each
+                          ₹{item.price.toLocaleString("en-IN")} each
                         </p>
                       )}
                     </div>
@@ -362,7 +423,7 @@ export default function CartPage() {
 
                   {/* Remove Button */}
                   <div className="remove-btn-container" style={{ flexShrink: 0 }}>
-                    <button className="remove-btn" aria-label="Remove item" onClick={() => removeItem(item.id)}>
+                    <button className="remove-btn" aria-label="Remove item" onClick={() => handleRemoveItem(item.id)}>
                       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                         <polyline points="3 6 5 6 21 6"></polyline>
                         <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
@@ -375,7 +436,7 @@ export default function CartPage() {
 
               {/* Back to shopping */}
               <div style={{ marginTop: 8 }}>
-                <Link href="/plants/monstera" className="outline-btn" style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                <Link href="/categories/plants" className="outline-btn" style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
                   ← Continue Shopping
                 </Link>
               </div>
@@ -389,17 +450,24 @@ export default function CartPage() {
                 </h2>
 
                 {/* Promo Code Form */}
-                <form onSubmit={applyPromo} style={{ display: "flex", gap: 8, marginBottom: 20 }}>
+                <form onSubmit={handleApplyPromo} style={{ display: "flex", gap: 8, marginBottom: 20 }}>
                   <input
                     className="promo-input"
                     value={promoInput}
                     onChange={(e) => setPromoInput(e.target.value)}
                     placeholder="Promo Code"
                     aria-label="Promo Code"
+                    disabled={!!appliedDiscount}
                   />
-                  <button type="submit" className="outline-btn" style={{ padding: "10px 18px", borderRadius: 10, fontSize: 13, fontWeight: 600 }}>
-                    Apply
-                  </button>
+                  {appliedDiscount ? (
+                    <button type="button" className="outline-btn" onClick={handleRemovePromo} style={{ padding: "10px 18px", borderRadius: 10, fontSize: 13, fontWeight: 600, color: T.red, borderColor: T.red }}>
+                      Remove
+                    </button>
+                  ) : (
+                    <button type="submit" className="outline-btn" style={{ padding: "10px 18px", borderRadius: 10, fontSize: 13, fontWeight: 600 }}>
+                      Apply
+                    </button>
+                  )}
                 </form>
                 {promoError && <p style={{ fontSize: 12, color: T.red, marginTop: -14, marginBottom: 16 }}>{promoError}</p>}
                 {promoSuccess && <p style={{ fontSize: 12, color: T.green, marginTop: -14, marginBottom: 16 }}>{promoSuccess}</p>}
@@ -409,13 +477,13 @@ export default function CartPage() {
                   
                   <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14, color: T.body }}>
                     <span>Subtotal</span>
-                    <span style={{ fontWeight: 500 }}>${subtotal.toFixed(2)}</span>
+                    <span style={{ fontWeight: 500 }}>₹{subtotal.toLocaleString("en-IN")}</span>
                   </div>
 
                   {discountAmount > 0 && (
                     <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14, color: T.green }}>
-                      <span>Discount ({discountPercent}%)</span>
-                      <span style={{ fontWeight: 500 }}>-${discountAmount.toFixed(2)}</span>
+                      <span>Discount ({appliedDiscount?.code})</span>
+                      <span style={{ fontWeight: 500 }}>-₹{discountAmount.toLocaleString("en-IN")}</span>
                     </div>
                   )}
 
@@ -425,14 +493,14 @@ export default function CartPage() {
                       {shippingFee === 0 ? (
                         <span style={{ color: T.green }}>Free</span>
                       ) : (
-                        `$${shippingFee.toFixed(2)}`
+                        `₹${shippingFee.toLocaleString("en-IN")}`
                       )}
                     </span>
                   </div>
 
                   <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14, color: T.body }}>
                     <span>Estimated Tax (8%)</span>
-                    <span style={{ fontWeight: 500 }}>${taxAmount.toFixed(2)}</span>
+                    <span style={{ fontWeight: 500 }}>₹{taxAmount.toLocaleString("en-IN")}</span>
                   </div>
 
                 </div>
@@ -440,12 +508,12 @@ export default function CartPage() {
                 {/* Final Total */}
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24 }}>
                   <span style={{ fontSize: 16, fontWeight: 700, color: T.heading }}>Total</span>
-                  <span style={{ fontSize: 22, fontWeight: 800, color: T.heading }}>${total.toFixed(2)}</span>
+                  <span style={{ fontSize: 22, fontWeight: 800, color: T.heading }}>₹{total.toLocaleString("en-IN")}</span>
                 </div>
 
                 {/* Checkout buttons */}
                 <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-                  <Link href="/checkout" className="green-btn" style={{ justifyContent: "center", width: "100%", padding: "14px 28px", fontSize: 15 }}>
+                  <Link href="/checkout" onClick={() => useCheckoutStore.getState().clearBuyNowItem()} className="green-btn" style={{ justifyContent: "center", width: "100%", padding: "14px 28px", fontSize: 15, textDecoration: "none" }}>
                     Proceed to Checkout
                   </Link>
                   
@@ -466,7 +534,7 @@ export default function CartPage() {
         ) : (
           /* Empty state */
           <div className="scale-in" style={{ background: T.bgCard, borderRadius: 24, border: `1px solid ${T.border}`, padding: "80px 24px", textAlign: "center", boxShadow: T.shadow, maxWidth: 600, margin: "40px auto 0" }}>
-            <div style={{ width: 80, height: 80, borderRadius: "50%", background: T.greenLight, color: T.green, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 20px", fontSize: 36 }}>
+            <div style={{ width: 80, height: 80, borderRadius: "50%", background: T.greenPale, color: T.green, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 20px", fontSize: 36 }}>
               🛒
             </div>
             <h2 style={{ fontFamily: "'Outfit', sans-serif", fontWeight: 700, fontSize: 22, color: T.heading, marginBottom: 8 }}>
@@ -475,8 +543,8 @@ export default function CartPage() {
             <p style={{ fontSize: 14, color: T.muted, maxWidth: 320, margin: "0 auto 24px", lineHeight: 1.5 }}>
               Add some green friends, organic seeds, or expert tools to your space to get started.
             </p>
-            <Link href="/plants/monstera" className="green-btn">
-              Explore Plants
+            <Link href="/categories/plants" className="green-btn" style={{ textDecoration: "none" }}>
+              Explore Shop
             </Link>
           </div>
         )}

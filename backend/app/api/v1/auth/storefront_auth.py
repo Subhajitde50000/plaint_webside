@@ -2,6 +2,8 @@ import uuid
 from datetime import datetime, timezone, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, status, Response, Request
+from fastapi.security import OAuth2PasswordRequestForm
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -11,12 +13,7 @@ from app.schemas.auth import (
     ResetPasswordRequest, TokenRefreshRequest,
 )
 
-# Inline login schema (separate from register)
 from pydantic import BaseModel, EmailStr
-
-class _LoginRequest(BaseModel):
-    email: EmailStr
-    password: str
 
 from app.utils.security import (
     hash_password, verify_password, create_access_token,
@@ -24,10 +21,41 @@ from app.utils.security import (
 )
 from app.config import settings
 from app.tasks.email_tasks import send_verification_email, send_password_reset_email
+import random
 
 router = APIRouter(prefix="/auth", tags=["Auth — Storefront"])
 
 REFRESH_COOKIE = "refresh_token"
+
+
+def _generate_and_send_otp(user_id: int, email: str, first_name: str, db: Session) -> str:
+    """
+    Generate a 6-digit OTP, save it to DB, and send via email.
+    Returns the generated OTP token.
+    """
+    # Revoke old tokens
+    db.query(VerificationToken).filter(
+        VerificationToken.user_id == user_id,
+        VerificationToken.type == "email_verify",
+        # VerificationToken.used_at == None,
+    ).delete(synchronize_session=False)
+
+    # Generate new 6-digit OTP
+    token = "".join([str(random.randint(0, 9)) for _ in range(6)])
+
+    # Save to DB
+    db.add(VerificationToken(
+        user_id=user_id,
+        token=token,
+        type="email_verify",
+        expires_at=datetime.now(timezone.utc) + timedelta(minutes=10),
+    ))
+    db.commit()
+
+    # Send email async
+    send_verification_email.delay(user_id, email, first_name, token)
+
+    return token
 
 
 def _set_refresh_cookie(response: Response, raw_token: str):
@@ -43,58 +71,85 @@ def _set_refresh_cookie(response: Response, raw_token: str):
 
 @router.post("/register", status_code=status.HTTP_201_CREATED)
 async def register(payload: RegisterRequest, db: Session = Depends(get_db)):
-    if db.query(User).filter(User.email == payload.email.lower()).first():
+    existing_user = db.query(User).filter(User.email == payload.email.lower()).first()
+    if existing_user:
+        # user email already registered
+        if existing_user.email_verified == 1:
+            raise HTTPException(status_code=409, detail="Email already registered.")
+        
+        # user registered but not verified - resend OTP
+        _generate_and_send_otp(
+            user_id=existing_user.id,
+            email=existing_user.email,
+            first_name=existing_user.first_name,
+            db=db
+        )
+
+        return {"message": "Registration successful. Please verify your email.", "user_uuid": existing_user.uuid}
+
+    
+    # Create new user 
+    try:
+        user = User(
+            uuid=str(uuid.uuid4()),
+            first_name=payload.first_name,
+            last_name=payload.last_name,
+            email=payload.email.lower(),
+            phone=payload.phone,
+            password_hash=hash_password(payload.password),
+        )
+        db.add(user)
+        db.flush()
+
+        # Create loyalty account
+        from app.models.loyalty import LoyaltyAccount, Wishlist
+        db.add(LoyaltyAccount(user_id=user.id))
+        db.add(Wishlist(user_id=user.id))
+
+        # Generate and send verification OTP
+        _generate_and_send_otp(
+            user_id=user.id,
+            email=user.email,
+            first_name=user.first_name,
+            db=db
+        )
+    except IntegrityError:
+        db.rollback()
         raise HTTPException(status_code=409, detail="Email already registered.")
-
-    user = User(
-        uuid=str(uuid.uuid4()),
-        first_name=payload.first_name,
-        last_name=payload.last_name,
-        email=payload.email.lower(),
-        phone=payload.phone,
-        password_hash=hash_password(payload.password),
-    )
-    db.add(user)
-    db.flush()
-
-    # Create loyalty account
-    from app.models.loyalty import LoyaltyAccount, Wishlist
-    db.add(LoyaltyAccount(user_id=user.id))
-    db.add(Wishlist(user_id=user.id))
-
-    # Verification token
-    import random
-    token = "".join([str(random.randint(0, 9)) for _ in range(6)])
-    db.add(VerificationToken(
-        user_id=user.id,
-        token=token,
-        type="email_verify",
-        expires_at=datetime.now(timezone.utc) + timedelta(minutes=10),
-    ))
-    db.commit()
-
-    # Send verification email async via Celery
-    send_verification_email.delay(user.id, user.email, user.first_name, token)
 
     return {"message": "Registration successful. Please verify your email.", "user_uuid": user.uuid}
 
 
 @router.post("/login", response_model=LoginResponse)
 async def login(
-    payload: _LoginRequest,
-    response: Response,
+    form_data: OAuth2PasswordRequestForm = Depends(),
+    response: Response = None,
     db: Session = Depends(get_db),
 ):
-    # Accept email+password (reuse RegisterRequest fields)
+    # form_data.username is the email address (OAuth2 standard field name)
     user = db.query(User).filter(
-        User.email == payload.email.lower(),
+        User.email == form_data.username.lower(),
         User.deleted_at == None,
     ).first()
 
-    if not user or not user.password_hash or not verify_password(payload.password, user.password_hash):
+    if not user or not user.password_hash:
         raise HTTPException(status_code=401, detail="Invalid email or password.")
     if user.is_blocked:
         raise HTTPException(status_code=403, detail="Account is blocked. Contact support.")
+    if user.email_verified == 0:
+        # Email not verified — resend OTP and tell frontend to redirect
+        _generate_and_send_otp(
+            user_id=user.id,
+            email=user.email,
+            first_name=user.first_name,
+            db=db
+        )
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="email_not_verified"
+        )
+    if not verify_password(form_data.password, user.password_hash):
+        raise HTTPException(status_code=401, detail="Invalid email or password.")
 
     user.last_login_at = datetime.now(timezone.utc)
 
@@ -168,8 +223,17 @@ async def logout(request: Request, response: Response, db: Session = Depends(get
 
 @router.post("/forgot-password")
 async def forgot_password(payload: ForgotPasswordRequest, db: Session = Depends(get_db)):
+    print(payload)
     user = db.query(User).filter(User.email == payload.email.lower()).first()
     if user:
+        if user.email_verified == 0:
+            # send verification otp
+            _generate_and_send_otp(user.id, user.email, user.first_name, db=db)
+            raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="email_not_verified"
+            )
+
         token = generate_verification_token()
         db.add(VerificationToken(
             user_id=user.id,
@@ -262,24 +326,12 @@ async def resend_otp(payload: ResendOTPRequest, db: Session = Depends(get_db)):
         # Avoid email enumeration, return success message
         return {"message": "A new code has been sent."}
 
-    # Revoke old active email_verify tokens for this user
-    db.query(VerificationToken).filter(
-        VerificationToken.user_id == user.id,
-        VerificationToken.type == "email_verify",
-        VerificationToken.used_at == None,
-    ).update({VerificationToken.used_at: datetime.now(timezone.utc)})
-
-    import random
-    token = "".join([str(random.randint(0, 9)) for _ in range(6)])
-    db.add(VerificationToken(
+    # Generate and send new OTP
+    _generate_and_send_otp(
         user_id=user.id,
-        token=token,
-        type="email_verify",
-        expires_at=datetime.now(timezone.utc) + timedelta(minutes=10),
-    ))
-    db.commit()
-
-    # Send verification email async via Celery
-    send_verification_email.delay(user.id, user.email, user.first_name, token)
+        email=user.email,
+        first_name=user.first_name,
+        db=db
+    )
 
     return {"message": "A new code has been sent."}

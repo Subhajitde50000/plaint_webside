@@ -57,6 +57,7 @@ export default function SignUpPage() {
   }
 
   const onSubmit = (data: SignUpInput) => {
+    console.log(data)
     signUp(data);
   };
 
@@ -429,7 +430,7 @@ export default function SignUpPage() {
             <label className="form-label">First Name *</label>
             <input
               type="text"
-              placeholder="Priya"
+              placeholder="Sutanu"
               {...register("firstName")}
               className={`form-input ${errors.firstName ? "error" : ""}`}
               disabled={isLoading}
@@ -446,7 +447,7 @@ export default function SignUpPage() {
             <label className="form-label">Last Name *</label>
             <input
               type="text"
-              placeholder="Sharma"
+              placeholder="dan"
               {...register("lastName")}
               className={`form-input ${errors.lastName ? "error" : ""}`}
               disabled={isLoading}
@@ -465,7 +466,7 @@ export default function SignUpPage() {
           <label className="form-label">Email Address *</label>
           <input
             type="email"
-            placeholder="priya@email.com"
+            placeholder="Sutanu@email.com"
             {...register("email")}
             className={`form-input ${errors.email ? "error" : ""}`}
             disabled={isLoading}

@@ -69,6 +69,8 @@ class CreateOrderRequest(BaseModel):
     loyalty_points_to_use: Optional[int] = None
     gift_message: Optional[str] = None
     notes: Optional[str] = None
+    buy_now_variant_id: Optional[int] = None
+    buy_now_quantity: Optional[int] = None
 
 
 class VerifyPaymentRequest(BaseModel):

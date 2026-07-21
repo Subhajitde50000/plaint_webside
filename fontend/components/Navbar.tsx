@@ -3,6 +3,9 @@
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
+import { useMe } from "@/features/profile";
+import { useAuthStore } from "@/store/auth.store";
+import { useCart } from "@/features/cart/hooks/useCart";
 
 /* ── Icons ── */
 function LeafLogo() {
@@ -135,6 +138,22 @@ interface SharedNavbarProps {
 export default function SharedNavbar({ cartCount = 0 }: SharedNavbarProps) {
   const pathname = usePathname();
   const router = useRouter();
+  const { isAuthenticated, setUser } = useAuthStore();
+  const { profile } = useMe();
+  const { cart } = useCart();
+
+  const liveCount = cart?.items?.reduce((sum: number, item: any) => sum + item.quantity, 0) ?? 0;
+  const finalCartCount = liveCount > 0 ? liveCount : cartCount;
+
+  useEffect(() => {
+    if (profile) {
+      setUser(profile);
+      if (!isAuthenticated) {
+        useAuthStore.setState({ isAuthenticated: true });
+      }
+    }
+  }, [profile, isAuthenticated, setUser]);
+
   const [scrolled,    setScrolled]    = useState(false);
   const [menuOpen,    setMenuOpen]    = useState(false);
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
@@ -144,6 +163,16 @@ export default function SharedNavbar({ cartCount = 0 }: SharedNavbarProps) {
   const [mobileSearchVal, setMobileSearchVal] = useState("");
   const [searchHistory, setSearchHistory] = useState<string[]>([]);
   const mobileSearchInputRef = useRef<HTMLInputElement>(null);
+
+  // Handle profile icon click
+  const handleProfileClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    if (!isAuthenticated) {
+      router.push("/login?returnTo=/profile");
+    } else {
+      router.push("/profile");
+    }
+  };
 
   // Open search overlay on event (e.g. from the Search page input)
   useEffect(() => {
@@ -211,10 +240,17 @@ export default function SharedNavbar({ cartCount = 0 }: SharedNavbarProps) {
     }
   };
 
-  const executeMobileSearch = (query: string) => {
-    saveSearchQuery(query);
+  const executeSearch = (query: string) => {
+    const trimmed = query.trim();
+    if (!trimmed) return;
+    saveSearchQuery(trimmed);
+    setSearchOpen(false);
     setMobileSearchOpen(false);
-    router.push(`/search?q=${encodeURIComponent(query)}`);
+    router.push(`/search?q=${encodeURIComponent(trimmed)}`);
+  };
+
+  const executeMobileSearch = (query: string) => {
+    executeSearch(query);
   };
 
   const filteredSuggestions = mobileSearchVal.trim()
@@ -586,7 +622,7 @@ export default function SharedNavbar({ cartCount = 0 }: SharedNavbarProps) {
                       setSearchOpen(false);
                       setSearchValue("");
                     } else if (e.key === "Enter" && searchValue.trim()) {
-                      window.location.href = `/search?q=${encodeURIComponent(searchValue.trim())}`;
+                      executeSearch(searchValue);
                     }
                   }}
                   placeholder="Search plants, seeds..." aria-label="Search"
@@ -608,23 +644,28 @@ export default function SharedNavbar({ cartCount = 0 }: SharedNavbarProps) {
             ><SearchIcon /></button>
           </div>
 
-          {/* User */}
-          <Link href="/profile" aria-label="Account"
+          {/* User - Navigate to profile or login */}
+          <Link
+            href="/login?returnTo=/profile"
+            aria-label="Account"
+            onClick={handleProfileClick}
             style={{ width: "38px", height: "38px", borderRadius: "50px", border: "none", background: "transparent", cursor: "pointer", color: "#1c1c1c", display: "flex", alignItems: "center", justifyContent: "center", transition: "background 200ms" }}
             onMouseEnter={(e) => ((e.currentTarget as HTMLAnchorElement).style.background = "rgba(0,181,102,0.08)")}
             onMouseLeave={(e) => ((e.currentTarget as HTMLAnchorElement).style.background = "transparent")}
-          ><UserIcon /></Link>
+          >
+            <UserIcon />
+          </Link>
 
           {/* Cart */}
-          <Link href="/cart" aria-label={`Cart, ${cartCount} item${cartCount !== 1 ? "s" : ""}`}
+          <Link href="/cart" aria-label={`Cart, ${finalCartCount} item${finalCartCount !== 1 ? "s" : ""}`}
             style={{ position: "relative", width: "38px", height: "38px", borderRadius: "50px", border: "none", background: "transparent", cursor: "pointer", color: "#1c1c1c", display: "flex", alignItems: "center", justifyContent: "center", transition: "background 200ms" }}
             onMouseEnter={(e) => ((e.currentTarget as HTMLAnchorElement).style.background = "rgba(0,181,102,0.08)")}
             onMouseLeave={(e) => ((e.currentTarget as HTMLAnchorElement).style.background = "transparent")}
           >
             <CartIcon />
-            {cartCount > 0 && (
+            {finalCartCount > 0 && (
               <span style={{ position: "absolute", top: "3px", right: "3px", background: "#00b566", color: "white", fontSize: "9px", fontWeight: 700, width: "15px", height: "15px", borderRadius: "9999px", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                {cartCount > 9 ? "9+" : cartCount}
+                {finalCartCount > 9 ? "9+" : finalCartCount}
               </span>
             )}
           </Link>
@@ -637,7 +678,7 @@ export default function SharedNavbar({ cartCount = 0 }: SharedNavbarProps) {
           <HomeIcon />
           <span>Home</span>
         </Link>
-        <Link href="/collections/plants" className={`snav-bottom-item ${pathname === "/collections/plants" ? "active" : ""}`}>
+        <Link href="/categories/plants" className={`snav-bottom-item ${pathname === "/categories/plants" ? "active" : ""}`}>
           <PlantIcon />
           <span>Plants</span>
         </Link>
@@ -659,13 +700,22 @@ export default function SharedNavbar({ cartCount = 0 }: SharedNavbarProps) {
         <Link href="/cart" className={`snav-bottom-item ${pathname.startsWith("/cart") ? "active" : ""}`}>
           <div style={{ position: "relative", display: "inline-flex", alignItems: "center", justifyContent: "center" }}>
             <CartIcon />
-            {cartCount > 0 && (
+            {finalCartCount > 0 && (
               <span style={{ position: "absolute", top: "-6px", right: "-10px", background: "#00b566", color: "white", fontSize: "9px", fontWeight: 700, width: "15px", height: "15px", borderRadius: "9999px", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                {cartCount > 9 ? "9+" : cartCount}
+                {finalCartCount > 9 ? "9+" : finalCartCount}
               </span>
             )}
           </div>
           <span>Cart</span>
+        </Link>
+        <Link
+          href="/login?returnTo=/profile"
+          onClick={handleProfileClick}
+          className={`snav-bottom-item ${pathname === "/profile" ? "active" : ""}`}
+          style={{ background: "none", border: "none", cursor: "pointer", padding: 0 }}
+        >
+          <UserIcon />
+          <span>Profile</span>
         </Link>
       </div>
 

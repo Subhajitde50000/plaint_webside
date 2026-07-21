@@ -2,6 +2,7 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 from jose import JWTError
+import pprint
 
 from app.database import get_db
 from app.utils.security import decode_token
@@ -37,6 +38,7 @@ def get_current_user(
     user = db.query(User).filter(User.uuid == uuid, User.is_active == True).first()
     if not user:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found.")
+    # pprint.pprint(user.__dict__)
     return user
 
 

@@ -1,3 +1,4 @@
+import uuid
 from sqlalchemy import (
     Column, BigInteger, SmallInteger, String, Boolean, DateTime, Date,
     Enum, Text, DECIMAL, ForeignKey, Index, Integer
@@ -11,7 +12,7 @@ class Order(Base):
     __tablename__ = "orders"
 
     id = Column(BigInteger, primary_key=True, autoincrement=True)
-    uuid = Column(String(36), unique=True, nullable=False)
+    uuid = Column(String(36), unique=True, nullable=False, default=lambda: str(uuid.uuid4()))
     order_number = Column(String(50), unique=True, nullable=False)
     user_id = Column(BigInteger, ForeignKey("users.id", ondelete="SET NULL"))
     guest_email = Column(String(254))

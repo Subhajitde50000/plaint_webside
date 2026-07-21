@@ -47,6 +47,16 @@ class Settings(BaseSettings):
     MSG91_AUTH_KEY: str = "your-msg91-key"
     MSG91_SENDER_ID: str = "HEROPL"
 
+    # Google SMTP Settings
+    SMTP_HOST: str = "smtp.gmail.com"
+    SMTP_PORT: int = 587
+    SMTP_USER: str = ""
+
+    # Use a Google App Password (not your regular password) if 2FA is enabled
+    SMTP_PASSWORD: str = ""
+    EMAILS_FROM_NAME: str = "Hero Plants"
+    EMAILS_FROM_EMAIL: str = ""
+
     # CORS
     ALLOWED_ORIGINS: List[str] = ["http://localhost:3000", "http://localhost:3001"]
 

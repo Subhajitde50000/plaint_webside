@@ -1,5 +1,15 @@
 "use client";
 import { useState, useEffect, useRef, useCallback } from "react";
+import {
+  useMe, useUpdateProfile,
+  useAddresses, useAddAddress, useUpdateAddress, useDeleteAddress,
+  useLoyalty,
+  useWishlist, useAddToWishlist, useRemoveWishlist,
+  useMyPlants, useAddPlant, useAddPlantLog,
+} from "@/features/profile";
+import { useAuthStore } from "@/store/auth.store";
+import { useRouter } from "next/navigation";
+import { logoutApi } from "@/features/auth/api/auth.api";
 import Link from "next/link";
 /* ─────────────────────────────────────────────
    DESIGN TOKENS (CSS-in-JS via style injection)
@@ -683,105 +693,11 @@ const TOKENS = `
 /* ─────────────────────────────────────────────
    DATA (mock)
 ───────────────────────────────────────────── */
-const USER = {
-  firstName: "Priya",
-  lastName: "Kumar",
-  email: "priya.kumar@example.com",
-  phone: "+91 98765 43210",
-  dob: "1992-03-15",
-  gender: "Female",
-  about: "Passionate plant lover with a balcony garden and three monstera plants.",
-  language: "English",
-  currency: "INR",
-  points: 240,
-  tier: "Plant Lover",
-  ordersCount: 12,
-  plantsCount: 5,
-  reviewsCount: 8,
-  wishlistCount: 12,
-  initials: "PK",
-};
-const ORDERS = [
-  {
-    id: "ORD-4821", date: "15 Jun 2026", status: "delivered",
-    items: [
-      { name: "Monstera Deliciosa", variant: "Medium", price: "₹399", qty: 1, img: "🌿" },
-      { name: "Peace Lily", variant: "Small", price: "₹249", qty: 2, img: "🌸" },
-      { name: "ZZ Plant", variant: "Large", price: "₹599", qty: 1, img: "🌱" },
-    ],
-    total: "₹1,248",
-    delivery: "₹0",
-  },
-  {
-    id: "ORD-4312", date: "28 May 2026", status: "delivered",
-    items: [
-      { name: "Pothos Golden", variant: "Small", price: "₹199", qty: 2, img: "🍃" },
-    ],
-    total: "₹398",
-    delivery: "₹49",
-  },
-  {
-    id: "ORD-5102", date: "22 Jun 2026", status: "processing",
-    items: [
-      { name: "Fiddle Leaf Fig", variant: "Large", price: "₹1,299", qty: 1, img: "🌳" },
-    ],
-    total: "₹1,299",
-    delivery: "₹0",
-  },
-];
-const WISHLIST_ITEMS = [
-  { id: 1, name: "Anthurium Red", price: "₹549", originalPrice: "₹699", img: "🌺", inStock: true },
-  { id: 2, name: "Peace Lily", price: "₹349", originalPrice: null, img: "🌸", inStock: true },
-  { id: 3, name: "Snake Plant", price: "₹449", originalPrice: "₹599", img: "🌿", inStock: true },
-  { id: 4, name: "ZZ Plant", price: "₹599", originalPrice: null, img: "🌱", inStock: false },
-  { id: 5, name: "Pothos", price: "₹199", originalPrice: null, img: "🍃", inStock: true },
-  { id: 6, name: "Bird of Paradise", price: "₹1,499", originalPrice: "₹1,999", img: "🦜", inStock: true },
-  { id: 7, name: "Rubber Plant", price: "₹799", originalPrice: null, img: "🍀", inStock: true },
-  { id: 8, name: "Philodendron", price: "₹399", originalPrice: "₹499", img: "🌴", inStock: true },
-];
-const PLANTS = [
-  {
-    id: 1, name: "Monstera Deliciosa", added: "12 Jan 2026", location: "Living Room",
-    waterDays: 2, light: "Medium Light", temp: "65–85°F", repot: "May 2027", img: "🌿",
-    waterStatus: "good",
-  },
-  {
-    id: 2, name: "Peace Lily", added: "5 Mar 2026", location: "Bedroom",
-    waterDays: 0, light: "Low Light", temp: "60–80°F", repot: "Oct 2026", img: "🌸",
-    waterStatus: "today",
-  },
-  {
-    id: 3, name: "Pothos Golden", added: "20 Apr 2026", location: "Kitchen",
-    waterDays: -2, light: "Low–Medium", temp: "60–85°F", repot: "Mar 2027", img: "🍃",
-    waterStatus: "overdue",
-  },
-];
-const ADDRESSES = [
-  {
-    id: 1, type: "Home", icon: "🏠", isDefault: true,
-    name: "Priya Kumar", line1: "42, Green Park Society", line2: "Baner",
-    city: "Pune", state: "Maharashtra", pin: "411045", country: "India",
-    phone: "+91 98765 43210",
-  },
-  {
-    id: 2, type: "Work", icon: "🏢", isDefault: false,
-    name: "Priya Kumar", line1: "TechHub Office, 4th Floor", line2: "Hinjewadi Phase 1",
-    city: "Pune", state: "Maharashtra", pin: "411057", country: "India",
-    phone: "+91 98765 43210",
-  },
-];
+// ── Static fallbacks (used only before real API data arrives) ─────────────────
+const ORDERS: any[] = [];
 const NOTIFICATIONS = [
-  { id: 1, icon: "🚚", title: "Your order #ORD-4821 has been shipped!", body: "Estimated delivery: 18 Jun 2026", time: "2 hrs ago", read: false },
-  { id: 2, icon: "💧", title: "Time to water your Monstera!", body: "It's been 7 days since the last watering.", time: "1 day ago", read: false },
-  { id: 3, icon: "🏅", title: "You've earned 124 Green Points!", body: "From order #ORD-4821", time: "3 days ago", read: true },
-  { id: 4, icon: "🌸", title: "Peace Lily is back in stock!", body: "Your wishlist item is now available.", time: "5 days ago", read: true },
-];
-const POINTS_HISTORY = [
-  { date: "15 Jun 2026", desc: "Order #ORD-4821", points: +124, positive: true },
-  { date: "08 Jun 2026", desc: "Referral bonus", points: +50, positive: true },
-  { date: "01 Jun 2026", desc: "Redeemed for discount", points: -100, positive: false },
-  { date: "20 May 2026", desc: "Order #ORD-4312", points: +87, positive: true },
-  { date: "10 May 2026", desc: "Birthday bonus", points: +20, positive: true },
+  { id: 1, icon: "🚚", title: "Your order has been shipped!", body: "Check your orders for details.", time: "recently", read: false },
+  { id: 2, icon: "💧", title: "Time to water a plant!", body: "Check your plant diary.", time: "1 day ago", read: false },
 ];
 const REVIEWS_WRITTEN = [
   { id: 1, product: "Monstera Deliciosa", ordered: "15 Jun 2026", rating: 5, img: "🌿", text: "Absolutely beautiful plant! Arrived in perfect condition and the packaging was excellent." },
@@ -901,21 +817,28 @@ function ToggleSwitch({ checked, onChange, label }: { checked: boolean; onChange
 /* ─────────────────────────────────────────────
    SECTION: OVERVIEW DASHBOARD
 ───────────────────────────────────────────── */
-function OverviewSection({ onNavigate }: { onNavigate: (s: string) => void }) {
+function OverviewSection({
+  onNavigate, firstName, points, plantsCount, wishlistItems,
+}: {
+  onNavigate: (s: string) => void;
+  firstName: string;
+  points: number;
+  plantsCount: number;
+  wishlistItems: any[];
+}) {
   const stats = [
-    { value: USER.ordersCount, label: "Orders", section: "orders", icon: "📦" },
-    { value: USER.plantsCount, label: "Plants", section: "plants", icon: "🌿" },
-    { value: USER.points, label: "Points", section: "loyalty", icon: "🏅" },
-    { value: USER.reviewsCount, label: "Reviews", section: "reviews", icon: "⭐" },
+    { value: ORDERS.length, label: "Orders", section: "orders", icon: "📦" },
+    { value: plantsCount, label: "Plants", section: "plants", icon: "🌿" },
+    { value: points, label: "Points", section: "loyalty", icon: "🏅" },
+    { value: 0, label: "Reviews", section: "reviews", icon: "⭐" },
   ];
   const recentOrder = ORDERS[0];
-  const statusInfo = getStatusStyle(recentOrder.status);
   return (
     <section aria-label="Overview" style={{ animation: "slideUp var(--motion-normal) ease" }}>
       {/* Welcome header */}
       <div style={{ marginBottom: 32 }}>
         <h2 style={{ fontSize: 24, fontWeight: 700, color: "var(--profile-heading)", marginBottom: 6 }}>
-          Welcome back, {USER.firstName} 🌿
+          Welcome back, {firstName || "there"} 🌿
         </h2>
         <p style={{ fontSize: 14, color: "var(--profile-meta)" }}>Here&apos;s what&apos;s growing in your account.</p>
       </div>
@@ -933,49 +856,45 @@ function OverviewSection({ onNavigate }: { onNavigate: (s: string) => void }) {
           </button>
         ))}
       </div>
-      {/* Recent order */}
-      <div className="profile-card" style={{ marginBottom: 16 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
-          <h3 style={{ fontSize: 16, fontWeight: 700, color: "var(--profile-heading)" }}>Recent Order</h3>
-          <button onClick={() => onNavigate("orders")} style={{ background: "none", border: "none", color: "var(--color-surface-raised)", fontWeight: 600, fontSize: 13, cursor: "pointer", fontFamily: "Outfit" }}>View All Orders →</button>
-        </div>
-        <div style={{ display: "flex", gap: 14, alignItems: "center" }}>
-          <div style={{ width: 56, height: 56, borderRadius: "var(--radius-sm)", background: "rgba(0,181,102,0.08)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 28, flexShrink: 0 }}>{recentOrder.items[0].img}</div>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8, flexWrap: "wrap" }}>
-              <div>
-                <p style={{ fontSize: 14, fontWeight: 600, color: "var(--profile-heading)" }}>{recentOrder.items[0].name}</p>
-                {recentOrder.items.length > 1 && <p style={{ fontSize: 12, color: "var(--profile-meta)" }}>+ {recentOrder.items.length - 1} more items</p>}
-                <p style={{ fontSize: 15, fontWeight: 700, color: "var(--profile-heading)", marginTop: 4 }}>{recentOrder.total}</p>
-              </div>
-              <div style={{ textAlign: "right" }}>
-                <p style={{ fontSize: 9, color: "var(--profile-meta)" }}>Order #{recentOrder.id}</p>
-                <p style={{ fontSize: 9, color: "var(--profile-meta)" }}>{recentOrder.date}</p>
-                <span className={`badge-status ${statusInfo.cls}`} style={{ marginTop: 6, display: "inline-flex" }}>{statusInfo.icon} {statusInfo.label}</span>
-              </div>
-            </div>
+      {/* Recent order placeholder */}
+      {recentOrder ? (
+        <div className="profile-card" style={{ marginBottom: 16 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+            <h3 style={{ fontSize: 16, fontWeight: 700, color: "var(--profile-heading)" }}>Recent Order</h3>
+            <button onClick={() => onNavigate("orders")} style={{ background: "none", border: "none", color: "var(--color-surface-raised)", fontWeight: 600, fontSize: 13, cursor: "pointer", fontFamily: "Outfit" }}>View All Orders →</button>
           </div>
+          <p style={{ fontSize: 14, color: "var(--profile-meta)" }}>Order #{recentOrder.id}</p>
         </div>
-        <div style={{ display: "flex", gap: 10, marginTop: 14, flexWrap: "wrap" }}>
-          <button className="btn-profile-primary" style={{ height: 36, fontSize: 13 }}>Track Order →</button>
-          <button className="btn-profile-outline" style={{ height: 36, fontSize: 13 }}>Buy Again</button>
+      ) : (
+        <div className="profile-card" style={{ marginBottom: 16 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+            <h3 style={{ fontSize: 16, fontWeight: 700, color: "var(--profile-heading)" }}>Recent Order</h3>
+            <button onClick={() => onNavigate("orders")} style={{ background: "none", border: "none", color: "var(--color-surface-raised)", fontWeight: 600, fontSize: 13, cursor: "pointer", fontFamily: "Outfit" }}>View All Orders →</button>
+          </div>
+          <p style={{ fontSize: 14, color: "var(--profile-meta)" }}>No orders yet. Start shopping! 🌱</p>
         </div>
-      </div>
+      )}
       {/* Wishlist preview */}
       <div className="profile-card" style={{ marginBottom: 16 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
-          <h3 style={{ fontSize: 16, fontWeight: 700, color: "var(--profile-heading)" }}>Wishlist <span style={{ color: "var(--profile-meta)", fontWeight: 400 }}>({WISHLIST_ITEMS.length})</span></h3>
+          <h3 style={{ fontSize: 16, fontWeight: 700, color: "var(--profile-heading)" }}>Wishlist <span style={{ color: "var(--profile-meta)", fontWeight: 400 }}>({wishlistItems.length})</span></h3>
           <button onClick={() => onNavigate("wishlist")} style={{ background: "none", border: "none", color: "var(--color-surface-raised)", fontWeight: 600, fontSize: 13, cursor: "pointer", fontFamily: "Outfit" }}>View All →</button>
         </div>
-        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-          {WISHLIST_ITEMS.slice(0, 4).map(item => (
-            <div key={item.id} style={{ width: 64, textAlign: "center" }}>
-              <div style={{ width: 64, height: 64, borderRadius: "var(--radius-sm)", background: "rgba(0,181,102,0.06)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 28, marginBottom: 4, border: "1px solid var(--profile-divider)" }}>{item.img}</div>
-              <p style={{ fontSize: 10, color: "var(--profile-meta)", lineHeight: 1.3 }}>{item.name}</p>
-            </div>
-          ))}
-          <div style={{ width: 64, height: 64, borderRadius: "var(--radius-sm)", background: "var(--profile-divider)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, fontWeight: 700, color: "var(--profile-meta)" }}>+{WISHLIST_ITEMS.length - 4}</div>
-        </div>
+        {wishlistItems.length === 0 ? (
+          <p style={{ fontSize: 14, color: "var(--profile-meta)" }}>No wishlist items yet. Browse plants! 🌿</p>
+        ) : (
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+            {wishlistItems.slice(0, 4).map(item => (
+              <div key={item.id} style={{ width: 64, textAlign: "center" }}>
+                <div style={{ width: 64, height: 64, borderRadius: "var(--radius-sm)", background: "rgba(0,181,102,0.06)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 28, marginBottom: 4, border: "1px solid var(--profile-divider)" }}>🌿</div>
+                <p style={{ fontSize: 10, color: "var(--profile-meta)", lineHeight: 1.3 }}>{item.product_title ?? `Product #${item.product_id}`}</p>
+              </div>
+            ))}
+            {wishlistItems.length > 4 && (
+              <div style={{ width: 64, height: 64, borderRadius: "var(--radius-sm)", background: "var(--profile-divider)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, fontWeight: 700, color: "var(--profile-meta)" }}>+{wishlistItems.length - 4}</div>
+            )}
+          </div>
+        )}
       </div>
       {/* Loyalty card */}
       <div style={{ background: "var(--profile-points-bg)", border: "1px solid var(--color-surface-raised)", borderRadius: "var(--radius-xl)", padding: 24 }}>
@@ -983,19 +902,19 @@ function OverviewSection({ onNavigate }: { onNavigate: (s: string) => void }) {
           <div>
             <p style={{ fontSize: 12, color: "var(--profile-meta)", marginBottom: 4 }}>🏅 Green Points</p>
             <div style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
-              <span style={{ fontSize: 36, fontWeight: 800, color: "var(--color-surface-raised)" }}>{USER.points}</span>
+              <span style={{ fontSize: 36, fontWeight: 800, color: "var(--color-surface-raised)" }}>{points}</span>
               <span style={{ fontSize: 14, color: "var(--profile-meta)" }}>points</span>
             </div>
           </div>
           <div style={{ textAlign: "right" }}>
             <p style={{ fontSize: 13, color: "var(--profile-meta)" }}>Next: Silver at 500 pts</p>
-            <p style={{ fontSize: 12, fontWeight: 600, color: "var(--color-surface-raised)", marginTop: 4 }}>{Math.round((USER.points / 500) * 100)}% to Silver</p>
+            <p style={{ fontSize: 12, fontWeight: 600, color: "var(--color-surface-raised)", marginTop: 4 }}>{Math.min(Math.round((points / 500) * 100), 100)}% to Silver</p>
           </div>
         </div>
         <div className="loyalty-progress-track" style={{ marginBottom: 6 }}>
-          <div className="loyalty-progress-fill" style={{ width: `${(USER.points / 500) * 100}%` }} role="progressbar" aria-label={`${USER.points} of 500 points to Silver tier`} aria-valuenow={USER.points} aria-valuemin={0} aria-valuemax={500} />
+          <div className="loyalty-progress-fill" style={{ width: `${Math.min((points / 500) * 100, 100)}%` }} role="progressbar" aria-label={`${points} of 500 points to Silver tier`} aria-valuenow={points} aria-valuemin={0} aria-valuemax={500} />
         </div>
-        <p style={{ fontSize: 12, fontWeight: 600, color: "var(--color-surface-raised)", textAlign: "right" }}>{USER.points} / 500</p>
+        <p style={{ fontSize: 12, fontWeight: 600, color: "var(--color-surface-raised)", textAlign: "right" }}>{points} / 500</p>
         <div style={{ display: "flex", gap: 10, marginTop: 16 }}>
           <button className="btn-profile-primary" style={{ flex: 1, justifyContent: "center", height: 40, fontSize: 14 }} onClick={() => onNavigate("loyalty")}>Redeem Points</button>
           <button className="btn-profile-outline" style={{ flex: 1, justifyContent: "center", height: 40, fontSize: 14 }}>How it Works</button>
@@ -1013,11 +932,11 @@ function OrdersSection({ onToast }: { onToast: (msg: string, t?: ToastType["type
   const [expandedItems, setExpandedItems] = useState<Record<string, boolean>>({});
   const [trackingOrder, setTrackingOrder] = useState<typeof ORDERS[0] | null>(null);
   const tabs = ["all", "active", "delivered", "cancelled"];
-  const filtered = ORDERS.filter(o => {
+  const filtered = ORDERS.filter((o: any) => {
     if (activeTab === "active") return o.status === "processing" || o.status === "shipped";
     if (activeTab !== "all") return o.status === activeTab;
     return true;
-  }).filter(o => o.id.toLowerCase().includes(search.toLowerCase()) || o.items.some(i => i.name.toLowerCase().includes(search.toLowerCase())));
+  }).filter((o: any) => o.id.toLowerCase().includes(search.toLowerCase()) || o.items.some((i: any) => i.name.toLowerCase().includes(search.toLowerCase())));
   const TRACKING_STEPS = [
     { label: "Order Placed", time: "15 Jun — 10:24 AM", status: "completed" },
     { label: "Packed", time: "15 Jun — 2:48 PM", status: "completed" },
@@ -1060,7 +979,7 @@ function OrdersSection({ onToast }: { onToast: (msg: string, t?: ToastType["type
           <Link href="/"><button className="btn-profile-primary">Shop Plants</button></Link>
         </div>
       ) : (
-        filtered.map(order => {
+        filtered.map((order: any) => {
           const si = getStatusStyle(order.status);
           const isExpanded = expandedItems[order.id];
           const visibleItems = isExpanded ? order.items : order.items.slice(0, 2);
@@ -1075,7 +994,7 @@ function OrdersSection({ onToast }: { onToast: (msg: string, t?: ToastType["type
                 </div>
               </div>
               {/* Items */}
-              {visibleItems.map((item, i) => (
+              {visibleItems.map((item: any, i: number) => (
                 <div key={i} style={{ display: "flex", gap: 12, paddingBottom: 12, borderBottom: i < visibleItems.length - 1 ? "1px solid var(--profile-divider)" : "none", marginBottom: i < visibleItems.length - 1 ? 12 : 0, alignItems: "center" }}>
                   <div style={{ width: 56, height: 56, borderRadius: "var(--radius-sm)", background: "rgba(0,181,102,0.06)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 24, flexShrink: 0, border: "1px solid var(--profile-divider)" }}>{item.img}</div>
                   <div style={{ flex: 1 }}>
@@ -1140,18 +1059,25 @@ function OrdersSection({ onToast }: { onToast: (msg: string, t?: ToastType["type
 /* ─────────────────────────────────────────────
    SECTION: WISHLIST
 ───────────────────────────────────────────── */
-function WishlistSection({ onToast }: { onToast: (msg: string, t?: ToastType["type"], onUndo?: () => void) => void }) {
-  const [items, setItems] = useState(WISHLIST_ITEMS);
+function WishlistSection({
+  onToast, wishlistItems, onRemove,
+}: {
+  onToast: (msg: string, t?: ToastType["type"], onUndo?: () => void) => void;
+  wishlistItems: any[];
+  onRemove: (id: number) => void;
+}) {
+  const [items, setItems] = useState<any[]>(wishlistItems);
+  useEffect(() => { setItems(wishlistItems); }, [wishlistItems]);
+  const handleRemove = (productId: number) => {
+    const prev = [...items];
+    setItems(p => p.filter(x => x.product_id !== productId));
+    onRemove(productId);
+    onToast("Removed from wishlist", "success", () => setItems(prev));
+  };
   const [selected, setSelected] = useState<number[]>([]);
   const allSelected = selected.length === items.length && items.length > 0;
-  const removeItem = (id: number) => {
-    const item = items.find(i => i.id === id);
-    setItems(prev => prev.filter(i => i.id !== id));
-    setSelected(prev => prev.filter(s => s !== id));
-    onToast(`${item?.name} removed from wishlist`, "success", () => setItems(WISHLIST_ITEMS));
-  };
   const toggleSelect = (id: number) => setSelected(prev => prev.includes(id) ? prev.filter(s => s !== id) : [...prev, id]);
-  const toggleAll = () => setSelected(allSelected ? [] : items.map(i => i.id));
+  const toggleAll = () => setSelected(allSelected ? [] : items.map(i => i.product_id));
   return (
     <section aria-label="Wishlist" style={{ animation: "slideUp var(--motion-normal) ease" }}>
       <div className="section-hdr">
@@ -1179,7 +1105,7 @@ function WishlistSection({ onToast }: { onToast: (msg: string, t?: ToastType["ty
         <button
           disabled={selected.length === 0}
           aria-disabled={selected.length === 0}
-          onClick={() => { setItems(prev => prev.filter(i => !selected.includes(i.id))); setSelected([]); onToast("Selected items removed", "success"); }}
+          onClick={() => { setItems(prev => prev.filter(i => !selected.includes(i.product_id))); setSelected([]); onToast("Selected items removed", "success"); }}
           style={{ height: 36, fontSize: 13, opacity: selected.length === 0 ? 0.4 : 1, background: "transparent", color: "var(--profile-danger-text)", borderRadius: "var(--radius-full)", border: "1px solid var(--profile-danger-border)", cursor: selected.length === 0 ? "not-allowed" : "pointer", padding: "0 16px", fontWeight: 600, fontFamily: "Outfit", display: "inline-flex", alignItems: "center", gap: 6 }}>
           🗑 Remove ({selected.length})
         </button>
@@ -1194,14 +1120,14 @@ function WishlistSection({ onToast }: { onToast: (msg: string, t?: ToastType["ty
       ) : (
         <div className="wishlist-grid">
           {items.map(item => (
-            <div key={item.id} style={{ position: "relative", background: "var(--profile-card-bg)", border: `1px solid ${selected.includes(item.id) ? "var(--color-surface-raised)" : "var(--profile-card-border)"}`, borderRadius: "var(--radius-md)", overflow: "hidden", boxShadow: "var(--shadow-card)", transition: "all var(--motion-fast) ease" }}>
+            <div key={item.product_id} style={{ position: "relative", background: "var(--profile-card-bg)", border: `1px solid ${selected.includes(item.product_id) ? "var(--color-surface-raised)" : "var(--profile-card-border)"}`, borderRadius: "var(--radius-md)", overflow: "hidden", boxShadow: "var(--shadow-card)", transition: "all var(--motion-fast) ease" }}>
               {/* Checkbox overlay */}
               <div style={{ position: "absolute", top: 10, left: 10, zIndex: 2 }}>
-                <input type="checkbox" checked={selected.includes(item.id)} onChange={() => toggleSelect(item.id)}
-                  style={{ width: 18, height: 18, accentColor: "var(--color-surface-raised)", cursor: "pointer" }} aria-label={`Select ${item.name}`} />
+                <input type="checkbox" checked={selected.includes(item.product_id)} onChange={() => toggleSelect(item.product_id)}
+                  style={{ width: 18, height: 18, accentColor: "var(--color-surface-raised)", cursor: "pointer" }} aria-label={`Select ${item.product_title}`} />
               </div>
               {/* Remove btn */}
-              <button onClick={() => removeItem(item.id)} aria-label={`Remove ${item.name} from wishlist`}
+              <button onClick={() => handleRemove(item.product_id)} aria-label={`Remove ${item.product_title} from wishlist`}
                 style={{ position: "absolute", top: 8, right: 8, zIndex: 2, width: 28, height: 28, borderRadius: "50%", background: "rgba(255,255,255,0.9)", border: "1px solid var(--profile-divider)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, color: "var(--profile-meta)" }}>
                 ✕
               </button>
@@ -1216,13 +1142,13 @@ function WishlistSection({ onToast }: { onToast: (msg: string, t?: ToastType["ty
               </div>
               {/* Info */}
               <div style={{ padding: "12px 12px 14px" }}>
-                <p style={{ fontSize: 13, fontWeight: 600, color: "var(--profile-heading)", marginBottom: 4 }}>{item.name}</p>
+                <p style={{ fontSize: 13, fontWeight: 600, color: "var(--profile-heading)", marginBottom: 4 }}>{item.product_title}</p>
                 <div style={{ display: "flex", gap: 6, alignItems: "baseline", marginBottom: 10 }}>
                   <span style={{ fontSize: 15, fontWeight: 700, color: "var(--color-surface-raised)" }}>{item.price}</span>
                   {item.originalPrice && <span style={{ fontSize: 12, color: "var(--profile-meta)", textDecoration: "line-through" }}>{item.originalPrice}</span>}
                 </div>
                 {item.inStock ? (
-                  <button className="btn-profile-primary" style={{ width: "100%", justifyContent: "center", height: 36, fontSize: 13 }} onClick={() => onToast(`${item.name} added to cart!`, "success")}>
+                  <button className="btn-profile-primary" style={{ width: "100%", justifyContent: "center", height: 36, fontSize: 13 }} onClick={() => onToast(`${item.product_title} added to cart!`, "success")}>
                     🛒 Move to Cart
                   </button>
                 ) : (
@@ -1241,16 +1167,14 @@ function WishlistSection({ onToast }: { onToast: (msg: string, t?: ToastType["ty
 /* ─────────────────────────────────────────────
    SECTION: MY PLANTS
 ───────────────────────────────────────────── */
-function PlantsSection({ onToast }: { onToast: (msg: string, t?: ToastType["type"]) => void }) {
-  const [plants, setPlants] = useState(PLANTS);
+function PlantsSection({ onToast, plants, onAddPlant, onLogCare }: { onToast: (msg: string, t?: ToastType["type"]) => void; plants: any[]; onAddPlant: (p: any) => void; onLogCare: (id: number, p: any) => void }) {
   const [showAddModal, setShowAddModal] = useState(false);
   const [newPlant, setNewPlant] = useState({ name: "", nickname: "", location: "", date: "" });
   const handleAddPlant = (e: React.FormEvent) => {
     e.preventDefault();
-    setPlants(prev => [...prev, { id: Date.now(), name: newPlant.name || "New Plant", added: new Date().toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }), location: newPlant.location || "Unknown", waterDays: 7, light: "Medium Light", temp: "65–85°F", repot: "2027", img: "🌱", waterStatus: "good" }]);
+    onAddPlant({ name: newPlant.name, location: newPlant.location, added: newPlant.date });
     setShowAddModal(false);
     setNewPlant({ name: "", nickname: "", location: "", date: "" });
-    onToast("Plant added to your collection! 🌱", "success");
   };
   return (
     <section aria-label="My Plants" style={{ animation: "slideUp var(--motion-normal) ease" }}>
@@ -1295,7 +1219,7 @@ function PlantsSection({ onToast }: { onToast: (msg: string, t?: ToastType["type
                 </div>
                 {/* Card actions */}
                 <div style={{ borderTop: "1px solid var(--profile-divider)", marginTop: 14, paddingTop: 12, display: "flex", gap: 10, flexWrap: "wrap" }}>
-                  <button className="btn-profile-outline" style={{ height: 36, fontSize: 13 }} onClick={() => onToast(`Watering logged for ${plant.name} 💧`, "success")}>💧 Log Watering</button>
+                  <button className="btn-profile-outline" style={{ height: 36, fontSize: 13 }} onClick={() => onLogCare(plant.id, { action: "water" })}>💧 Log Watering</button>
                   <button className="btn-profile-outline" style={{ height: 36, fontSize: 13 }} onClick={() => onToast("Note added!", "success")}>📝 Add Note</button>
                   <button style={{ background: "none", border: "none", color: "var(--color-surface-raised)", fontWeight: 600, fontSize: 13, cursor: "pointer", fontFamily: "Outfit", textDecoration: "underline" }}>View Care Guide</button>
                 </div>
@@ -1340,15 +1264,40 @@ function PlantsSection({ onToast }: { onToast: (msg: string, t?: ToastType["type
 /* ─────────────────────────────────────────────
    SECTION: PERSONAL INFO
 ───────────────────────────────────────────── */
-function PersonalInfoSection({ onToast }: { onToast: (msg: string, t?: ToastType["type"]) => void }) {
-  const [form, setForm] = useState({ firstName: USER.firstName, lastName: USER.lastName, email: USER.email, phone: USER.phone, dob: USER.dob, gender: USER.gender, about: USER.about, language: USER.language, currency: USER.currency });
-  const [saving, setSaving] = useState(false);
-  const handleSave = async (e: React.FormEvent) => {
+function PersonalInfoSection({
+  onToast, profile, onSave, isSaving,
+}: {
+  onToast: (msg: string, t?: ToastType["type"]) => void;
+  profile: any;
+  onSave: (data: any) => void;
+  isSaving: boolean;
+}) {
+  const [form, setForm] = useState({
+    firstName: profile?.first_name ?? "",
+    lastName: profile?.last_name ?? "",
+    email: profile?.email ?? "",
+    email_verified: profile.email_verified ?? false,
+    phone: profile?.phone ?? "",
+    phone_verified: profile.phone_verified ?? false,
+    dob: "", gender: "", about: "", language: "English", currency: "INR",
+  });
+  useEffect(() => {
+    if (profile) {
+      setForm(f => ({
+        ...f,
+        firstName: profile.first_name ?? "",
+        lastName: profile.last_name ?? "",
+        email: profile.email ?? "",
+        email_verified: profile.email_verified ?? false,
+        phone: profile.phone ?? "",
+        phone_verified: profile.phone_verified ?? false,
+      }));
+    }
+  }, [profile]);
+  const initials = (form.firstName?.[0] ?? "") + (form.lastName?.[0] ?? "");
+  const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
-    setSaving(true);
-    await new Promise(r => setTimeout(r, 900));
-    setSaving(false);
-    onToast("Profile updated successfully ✓", "success");
+    onSave(form);
   };
   const aboutLength = form.about.length;
   return (
@@ -1361,7 +1310,7 @@ function PersonalInfoSection({ onToast }: { onToast: (msg: string, t?: ToastType
         <h3 style={{ fontSize: 15, fontWeight: 600, color: "var(--profile-heading)", marginBottom: 16 }}>Profile Photo</h3>
         <div style={{ display: "flex", alignItems: "center", gap: 20 }}>
           <div style={{ position: "relative", width: 80, height: 80 }}>
-            <div style={{ width: 80, height: 80, borderRadius: "50%", background: "var(--profile-avatar-bg)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 28, fontWeight: 700, color: "var(--profile-avatar-text)" }}>{USER.initials}</div>
+            <div style={{ width: 80, height: 80, borderRadius: "50%", background: "var(--profile-avatar-bg)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 28, fontWeight: 700, color: "var(--profile-avatar-text)" }}>{initials.toUpperCase() || "?"}</div>
             <button aria-label="Change profile photo"
               style={{ position: "absolute", inset: 0, borderRadius: "50%", background: "rgba(0,0,0,0.4)", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, opacity: 0, transition: "opacity var(--motion-instant)" }}
               onMouseEnter={e => { (e.currentTarget as HTMLElement).style.opacity = "1"; }}
@@ -1376,15 +1325,17 @@ function PersonalInfoSection({ onToast }: { onToast: (msg: string, t?: ToastType
         </div>
         <p style={{ fontSize: 12, color: "var(--profile-meta)", marginTop: 10 }}>JPG, PNG or WebP. Max 5MB.</p>
       </div>
-      {/* Email verification banner */}
-      <div role="alert" aria-live="assertive" style={{ background: "rgba(217,119,6,0.08)", borderLeft: "4px solid #d97706", borderRadius: "var(--radius-sm)", padding: "12px 16px", marginBottom: 20, display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
-        <span>⚠️</span>
-        <p style={{ fontSize: 14, color: "var(--profile-heading)", flex: 1 }}>Verify your email — We sent a link to {form.email}</p>
-        <div style={{ display: "flex", gap: 10 }}>
-          <button style={{ background: "none", border: "none", color: "var(--color-surface-raised)", fontWeight: 600, fontSize: 13, cursor: "pointer", fontFamily: "Outfit" }} onClick={() => onToast("Verification email resent!", "info")}>Resend Email</button>
-          <button style={{ background: "none", border: "none", color: "var(--profile-meta)", fontWeight: 500, fontSize: 13, cursor: "pointer", fontFamily: "Outfit" }}>Change Email</button>
+      {/* Email verification banner (shown when email is not verified) */}
+      {!form.email_verified && (
+        <div role="alert" aria-live="assertive" style={{ background: "rgba(217,119,6,0.08)", borderLeft: "4px solid #d97706", borderRadius: "var(--radius-sm)", padding: "12px 16px", marginBottom: 20, display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+          <span>⚠️</span>
+          <p style={{ fontSize: 14, color: "var(--profile-heading)", flex: 1 }}>Verify your email — We sent a link to {form.email}</p>
+          <div style={{ display: "flex", gap: 10 }}>
+            <button style={{ background: "none", border: "none", color: "var(--color-surface-raised)", fontWeight: 600, fontSize: 13, cursor: "pointer", fontFamily: "Outfit" }} onClick={() => onToast("Verification email resent!", "info")}>Resend Email</button>
+            <button style={{ background: "none", border: "none", color: "var(--profile-meta)", fontWeight: 500, fontSize: 13, cursor: "pointer", fontFamily: "Outfit" }}>Change Email</button>
+          </div>
         </div>
-      </div>
+      )}
       <form onSubmit={handleSave}>
         <div className="profile-card">
           <div className="form-grid-2" style={{ gap: 16 }}>
@@ -1436,8 +1387,8 @@ function PersonalInfoSection({ onToast }: { onToast: (msg: string, t?: ToastType
           </div>
           <div style={{ display: "flex", gap: 16, marginTop: 24, justifyContent: "flex-end", flexWrap: "wrap" }}>
             <button type="button" style={{ background: "none", border: "none", color: "var(--profile-meta)", cursor: "pointer", fontSize: 14, fontFamily: "Outfit" }}>Cancel</button>
-            <button type="submit" className="btn-profile-primary" style={{ minWidth: 140, justifyContent: "center" }} disabled={saving}>
-              {saving ? "Saving…" : "Save Changes"}
+            <button type="submit" className="btn-profile-primary" style={{ minWidth: 140, justifyContent: "center" }} disabled={isSaving}>
+              {isSaving ? "Saving…" : "Save Changes"}
             </button>
           </div>
         </div>
@@ -1448,26 +1399,65 @@ function PersonalInfoSection({ onToast }: { onToast: (msg: string, t?: ToastType
 /* ─────────────────────────────────────────────
    SECTION: ADDRESSES
 ───────────────────────────────────────────── */
-function AddressesSection({ onToast }: { onToast: (msg: string, t?: ToastType["type"]) => void }) {
-  const [addresses, setAddresses] = useState(ADDRESSES);
+function AddressesSection({
+  onToast, addresses, onAdd, onUpdate, onDelete
+}: {
+  onToast: (msg: string, t?: ToastType["type"]) => void;
+  addresses: any[];
+  onAdd: (a: any) => void;
+  onUpdate: (id: number, a: any) => void;
+  onDelete: (id: number) => void;
+}) {
   const [showModal, setShowModal] = useState(false);
-  const [editAddr, setEditAddr] = useState<typeof ADDRESSES[0] | null>(null);
+  const [editAddr, setEditAddr] = useState<any | null>(null);
   const [form, setForm] = useState({ type: "Home", name: "", phone: "", pin: "", city: "", line1: "", line2: "", state: "", country: "India", isDefault: false });
-  const openAdd = () => { setEditAddr(null); setForm({ type: "Home", name: "", phone: "", pin: "", city: "", line1: "", line2: "", state: "", country: "India", isDefault: false }); setShowModal(true); };
-  const openEdit = (addr: typeof ADDRESSES[0]) => { setEditAddr(addr); setForm({ type: addr.type, name: addr.name, phone: addr.phone, pin: addr.pin, city: addr.city, line1: addr.line1, line2: addr.line2, state: addr.state, country: addr.country, isDefault: addr.isDefault }); setShowModal(true); };
+
+  const openAdd = () => {
+    setEditAddr(null);
+    setForm({ type: "Home", name: "", phone: "", pin: "", city: "", line1: "", line2: "", state: "", country: "India", isDefault: false });
+    setShowModal(true);
+  };
+
+  const openEdit = (addr: any) => {
+    setEditAddr(addr);
+    setForm({
+      type: addr.label || "Home",
+      name: addr.recipient_name || "",
+      phone: addr.phone || "",
+      pin: addr.pincode || "",
+      city: addr.city || "",
+      line1: addr.line1 || "",
+      line2: addr.line2 || "",
+      state: addr.state || "",
+      country: addr.country || "India",
+      isDefault: addr.is_default || false,
+    });
+    setShowModal(true);
+  };
+
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
+    const payload = {
+      label: form.type,
+      recipient_name: form.name,
+      phone: form.phone,
+      line1: form.line1,
+      line2: form.line2 || undefined,
+      city: form.city,
+      state: form.state,
+      pincode: form.pin,
+      country: form.country,
+      is_default: form.isDefault,
+    };
+
     if (editAddr) {
-      setAddresses(prev => prev.map(a => a.id === editAddr.id ? { ...a, ...form } : a));
-      onToast("Address updated!", "success");
+      onUpdate(editAddr.id, payload);
     } else {
-      setAddresses(prev => [...prev, { id: Date.now(), ...form, icon: form.type === "Home" ? "🏠" : "🏢" }]);
-      onToast("Address saved!", "success");
+      onAdd(payload);
     }
     setShowModal(false);
   };
-  const deleteAddr = (id: number) => { setAddresses(prev => prev.filter(a => a.id !== id)); onToast("Address removed", "success"); };
-  const setDefault = (id: number) => { setAddresses(prev => prev.map(a => ({ ...a, isDefault: a.id === id }))); onToast("Default address updated ✓", "success"); };
+
   return (
     <section aria-label="Saved Addresses" style={{ animation: "slideUp var(--motion-normal) ease" }}>
       <div className="section-hdr">
@@ -1483,26 +1473,50 @@ function AddressesSection({ onToast }: { onToast: (msg: string, t?: ToastType["t
         </div>
       ) : (
         <div className="address-grid">
-          {addresses.map(addr => (
-            <div key={addr.id} className="profile-card" style={{ borderColor: addr.isDefault ? "var(--color-surface-raised)" : "var(--profile-card-border)", borderWidth: addr.isDefault ? 2 : 1 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 10, alignItems: "flex-start" }}>
-                <p style={{ fontSize: 14, fontWeight: 700, color: "var(--profile-heading)" }}>{addr.icon} {addr.type}</p>
-                {addr.isDefault && <span style={{ background: "var(--color-surface-raised)", color: "#fff", fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: "var(--radius-full)" }}>Default</span>}
+          {addresses.map((addr: any) => {
+            const isDefault = addr.is_default;
+            const icon = addr.label === "Home" ? "🏠" : addr.label === "Work" ? "🏢" : "📍";
+            const fullName = addr.recipient_name || "";
+            return (
+              <div key={addr.id} className="profile-card" style={{ borderColor: isDefault ? "var(--color-surface-raised)" : "var(--profile-card-border)", borderWidth: isDefault ? 2 : 1 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 10, alignItems: "flex-start" }}>
+                  <p style={{ fontSize: 14, fontWeight: 700, color: "var(--profile-heading)" }}>{icon} {addr.label || "Address"}</p>
+                  {isDefault && <span style={{ background: "var(--color-surface-raised)", color: "#fff", fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: "var(--radius-full)" }}>Default</span>}
+                </div>
+                <div style={{ borderTop: "1px solid var(--profile-divider)", paddingTop: 10 }}>
+                  <p style={{ fontSize: 14, fontWeight: 600, color: "var(--profile-heading)" }}>{fullName}</p>
+                  <p style={{ fontSize: 14, color: "var(--profile-body)", lineHeight: 1.6 }}>{addr.line1}</p>
+                  {addr.line2 && <p style={{ fontSize: 14, color: "var(--profile-body)", lineHeight: 1.6 }}>{addr.line2}</p>}
+                  <p style={{ fontSize: 14, color: "var(--profile-body)", lineHeight: 1.6 }}>{addr.city} — {addr.pincode}</p>
+                  <p style={{ fontSize: 14, color: "var(--profile-body)", lineHeight: 1.6 }}>{addr.state}, {addr.country}</p>
+                  <p style={{ fontSize: 14, color: "var(--profile-meta)", marginTop: 6 }}>📞 {addr.phone}</p>
+                </div>
+                <div style={{ display: "flex", gap: 10, marginTop: 14, flexWrap: "wrap", alignItems: "center" }}>
+                  <button className="btn-profile-outline" style={{ height: 34, fontSize: 13 }} onClick={() => openEdit(addr)}>Edit</button>
+                  <button style={{ background: "none", border: "none", color: "var(--profile-danger-text)", fontSize: 13, cursor: "pointer", fontFamily: "Outfit" }} onClick={() => onDelete(addr.id)}>Delete</button>
+                  {!isDefault && (
+                    <button
+                      style={{ background: "none", border: "none", color: "var(--color-surface-raised)", fontSize: 13, cursor: "pointer", fontFamily: "Outfit", fontWeight: 600 }}
+                      onClick={() => onUpdate(addr.id, {
+                        label: addr.label,
+                        recipient_name: addr.recipient_name,
+                        phone: addr.phone,
+                        line1: addr.line1,
+                        line2: addr.line2 || undefined,
+                        city: addr.city,
+                        state: addr.state,
+                        pincode: addr.pincode,
+                        country: addr.country,
+                        is_default: true
+                      })}
+                    >
+                      Set as Default
+                    </button>
+                  )}
+                </div>
               </div>
-              <div style={{ borderTop: "1px solid var(--profile-divider)", paddingTop: 10 }}>
-                <p style={{ fontSize: 14, fontWeight: 600, color: "var(--profile-heading)" }}>{addr.name}</p>
-                <p style={{ fontSize: 14, color: "var(--profile-body)", lineHeight: 1.6 }}>{addr.line1}</p>
-                <p style={{ fontSize: 14, color: "var(--profile-body)", lineHeight: 1.6 }}>{addr.line2}, {addr.city} — {addr.pin}</p>
-                <p style={{ fontSize: 14, color: "var(--profile-body)", lineHeight: 1.6 }}>{addr.state}, {addr.country}</p>
-                <p style={{ fontSize: 14, color: "var(--profile-meta)", marginTop: 6 }}>📞 {addr.phone}</p>
-              </div>
-              <div style={{ display: "flex", gap: 10, marginTop: 14, flexWrap: "wrap", alignItems: "center" }}>
-                <button className="btn-profile-outline" style={{ height: 34, fontSize: 13 }} onClick={() => openEdit(addr)}>Edit</button>
-                <button style={{ background: "none", border: "none", color: "var(--profile-danger-text)", fontSize: 13, cursor: "pointer", fontFamily: "Outfit" }} onClick={() => deleteAddr(addr.id)}>Delete</button>
-                {!addr.isDefault && <button style={{ background: "none", border: "none", color: "var(--color-surface-raised)", fontSize: 13, cursor: "pointer", fontFamily: "Outfit", fontWeight: 600 }} onClick={() => setDefault(addr.id)}>Set as Default</button>}
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
       {/* Add/Edit Modal */}
@@ -1571,10 +1585,18 @@ function AddressesSection({ onToast }: { onToast: (msg: string, t?: ToastType["t
 /* ─────────────────────────────────────────────
    SECTION: LOYALTY REWARDS
 ───────────────────────────────────────────── */
-function LoyaltySection({ onToast }: { onToast: (msg: string, t?: ToastType["type"]) => void }) {
+function LoyaltySection({
+  onToast, loyalty, tierMeta, pointsHistory,
+}: {
+  onToast: (msg: string, t?: ToastType["type"]) => void;
+  loyalty: any;
+  tierMeta: any;
+  pointsHistory: any[];
+}) {
+  const pts = loyalty?.points_balance ?? 0;
+  const maxRedeem = pts;
   const [showRedeem, setShowRedeem] = useState(false);
   const [redeemPoints, setRedeemPoints] = useState(100);
-  const maxRedeem = USER.points;
   const tiers = [
     { name: "🌿 Plant Lover", range: "0–499 pts", current: true, benefits: ["1 point per ₹10 spent", "Birthday discount"] },
     { name: "🥈 Silver", range: "500–999 pts", current: false, benefits: ["1.5× points", "Free delivery on ₹399+"] },
@@ -1590,15 +1612,15 @@ function LoyaltySection({ onToast }: { onToast: (msg: string, t?: ToastType["typ
         <p style={{ fontSize: 13, color: "var(--profile-meta)", marginBottom: 12 }}>🏅 Green Points</p>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: 16, marginBottom: 16, flexWrap: "wrap" }}>
           <div>
-            <span style={{ fontSize: 36, fontWeight: 800, color: "var(--color-surface-raised)" }}>{USER.points}</span>
+            <span style={{ fontSize: 36, fontWeight: 800, color: "var(--color-surface-raised)" }}>{pts}</span>
             <span style={{ fontSize: 14, color: "var(--profile-meta)", marginLeft: 6 }}>points</span>
           </div>
-          <p style={{ fontSize: 13, color: "var(--profile-meta)" }}>Next: Silver at 500 pts</p>
+          <p style={{ fontSize: 13, fontWeight: 600, color: "var(--profile-meta)" }}>{tierMeta?.emoji ?? "🌱"} {tierMeta?.label ?? "Plant Lover"}</p>
         </div>
         <div className="loyalty-progress-track" style={{ marginBottom: 8 }}>
-          <div className="loyalty-progress-fill" style={{ width: `${(USER.points / 500) * 100}%` }} role="progressbar" aria-label={`${USER.points} of 500 points to Silver tier`} aria-valuenow={USER.points} aria-valuemin={0} aria-valuemax={500} />
+          <div className="loyalty-progress-fill" style={{ width: `${Math.min((pts / 500) * 100, 100)}%` }} role="progressbar" aria-label={`${pts} of 500 points`} aria-valuenow={pts} aria-valuemin={0} aria-valuemax={500} />
         </div>
-        <p style={{ fontSize: 12, fontWeight: 600, color: "var(--color-surface-raised)", textAlign: "right", marginBottom: 16 }}>{USER.points} / 500</p>
+        <p style={{ fontSize: 12, fontWeight: 600, color: "var(--color-surface-raised)", textAlign: "right", marginBottom: 16 }}>{pts} / 500</p>
         {/* Tier journey */}
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 20, flexWrap: "wrap" }}>
           <span style={{ fontSize: 13, fontWeight: 700, color: "var(--color-surface-raised)" }}>🌿 Plant Lover</span>
@@ -1650,11 +1672,11 @@ function LoyaltySection({ onToast }: { onToast: (msg: string, t?: ToastType["typ
               </tr>
             </thead>
             <tbody>
-              {POINTS_HISTORY.map((h, i) => (
+              {pointsHistory.map((h, i) => (
                 <tr key={i} style={{ background: i % 2 === 0 ? "transparent" : "rgba(28,28,28,0.02)" }}>
-                  <td style={{ padding: "10px 14px", fontSize: 14, color: "var(--profile-meta)", borderBottom: i < POINTS_HISTORY.length - 1 ? "1px solid var(--profile-divider)" : "none" }}>{h.date}</td>
-                  <td style={{ padding: "10px 14px", fontSize: 14, color: "var(--profile-body)", borderBottom: i < POINTS_HISTORY.length - 1 ? "1px solid var(--profile-divider)" : "none" }}>{h.desc}</td>
-                  <td style={{ padding: "10px 14px", fontSize: 14, fontWeight: 600, color: h.positive ? "var(--profile-status-delivered)" : "var(--profile-status-cancelled)", textAlign: "right", borderBottom: i < POINTS_HISTORY.length - 1 ? "1px solid var(--profile-divider)" : "none" }}>
+                  <td style={{ padding: "10px 14px", fontSize: 14, color: "var(--profile-meta)", borderBottom: i < pointsHistory.length - 1 ? "1px solid var(--profile-divider)" : "none" }}>{h.date}</td>
+                  <td style={{ padding: "10px 14px", fontSize: 14, color: "var(--profile-body)", borderBottom: i < pointsHistory.length - 1 ? "1px solid var(--profile-divider)" : "none" }}>{h.desc}</td>
+                  <td style={{ padding: "10px 14px", fontSize: 14, fontWeight: 600, color: h.positive ? "var(--profile-status-delivered)" : "var(--profile-status-cancelled)", textAlign: "right", borderBottom: i < pointsHistory.length - 1 ? "1px solid var(--profile-divider)" : "none" }}>
                     {h.positive ? "+" : ""}{h.points} pts
                   </td>
                 </tr>
@@ -1668,7 +1690,7 @@ function LoyaltySection({ onToast }: { onToast: (msg: string, t?: ToastType["typ
       {showRedeem && (
         <Modal title="Redeem Green Points" onClose={() => setShowRedeem(false)} maxWidth={440}
           footer={<button className="btn-profile-primary" style={{ flex: 1, justifyContent: "center" }} onClick={() => { setShowRedeem(false); onToast(`${redeemPoints} points redeemed! Code: GREEN-${Math.floor(redeemPoints * 0.1)}`, "success"); }}>Apply to Next Order</button>}>
-          <p style={{ fontSize: 14, color: "var(--profile-meta)", marginBottom: 20 }}>Available: <strong style={{ color: "var(--profile-heading)" }}>{USER.points} pts = ₹{Math.floor(USER.points * 0.1)} off</strong></p>
+          <p style={{ fontSize: 14, color: "var(--profile-meta)", marginBottom: 20 }}>Available: <strong style={{ color: "var(--profile-heading)" }}>{pts} pts = ₹{Math.floor(pts * 0.1)} off</strong></p>
           <label style={{ display: "block", fontSize: 15, fontWeight: 600, color: "var(--profile-heading)", marginBottom: 10 }}>Points to redeem:</label>
           <input type="range" min={100} max={maxRedeem} step={10} value={redeemPoints} onChange={e => setRedeemPoints(Number(e.target.value))}
             style={{ width: "100%", accentColor: "var(--color-surface-raised)", marginBottom: 8 }} aria-label="Points to redeem" />
@@ -2053,15 +2075,15 @@ function SecuritySection({ onToast }: { onToast: (msg: string, t?: ToastType["ty
 ───────────────────────────────────────────── */
 const NAV_ITEMS = [
   { id: "overview", icon: "🏠", label: "Overview", badge: null },
-  { id: "orders", icon: "📦", label: "My Orders", badge: USER.ordersCount },
-  { id: "wishlist", icon: "♡", label: "Wishlist", badge: USER.wishlistCount },
-  { id: "plants", icon: "🌿", label: "My Plants", badge: USER.plantsCount },
+  { id: "orders", icon: "📦", label: "My Orders", badge: null },
+  { id: "wishlist", icon: "♡", label: "Wishlist", badge: null },
+  { id: "plants", icon: "🌿", label: "My Plants", badge: null },
   { id: "personal-info", icon: "👤", label: "Personal Info", badge: null },
-  { id: "addresses", icon: "📍", label: "Addresses", badge: 2 },
-  { id: "loyalty", icon: "🏅", label: "Loyalty Rewards", badge: `${USER.points} pts` },
+  { id: "addresses", icon: "📍", label: "Addresses", badge: null },
+  { id: "loyalty", icon: "🏅", label: "Loyalty Rewards", badge: null },
   { id: "payments", icon: "💳", label: "Payment Methods", badge: null },
-  { id: "reviews", icon: "⭐", label: "My Reviews", badge: USER.reviewsCount },
-  { id: "notifications", icon: "🔔", label: "Notifications", badge: 2 },
+  { id: "reviews", icon: "⭐", label: "My Reviews", badge: null },
+  { id: "notifications", icon: "🔔", label: "Notifications", badge: null },
   { id: "security", icon: "🔒", label: "Security", badge: null },
 ];
 const MOBILE_TABS = [
@@ -2074,9 +2096,50 @@ const MOBILE_TABS = [
    MAIN PROFILE PAGE
 ───────────────────────────────────────────── */
 export default function ProfilePage() {
+  const router = useRouter();
   const [activeSection, setActiveSection] = useState("overview");
   const [showSignOut, setShowSignOut] = useState(false);
   const { toasts, addToast } = useToast();
+  const { logout } = useAuthStore();
+
+  // ── Real API data ────────────────────────────────────────────────────────
+  const { profile, isLoading: profileLoading } = useMe();
+  const { updateProfile, isLoading: isUpdatingProfile } = useUpdateProfile();
+  const { addresses } = useAddresses();
+  const { addAddress } = useAddAddress();
+  const { updateAddress } = useUpdateAddress();
+  const { deleteAddress } = useDeleteAddress();
+  const { loyalty, tierMeta } = useLoyalty();
+  const { items: wishlistItems } = useWishlist();
+  const { addToWishlist } = useAddToWishlist();
+  const { removeFromWishlist } = useRemoveWishlist();
+  const { plants } = useMyPlants();
+  const { addPlant } = useAddPlant();
+  const { addLog: addPlantLog } = useAddPlantLog();
+
+  // ── Derived user display values ─────────────────────────────────────────
+  const firstName   = profile?.first_name ?? "";
+  const lastName    = profile?.last_name ?? "";
+  const userEmail   = profile?.email ?? "";
+  const initials    = firstName && lastName
+    ? `${firstName[0]}${lastName[0]}`.toUpperCase()
+    : firstName ? firstName[0].toUpperCase() : "?";
+  const tierLabel   = tierMeta?.label ?? "Plant Lover";
+  const points      = loyalty?.points_balance ?? 0;
+  const pointsHistory = (loyalty?.recent_transactions ?? []).map((t) => ({
+    date: new Date(t.created_at).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }),
+    desc: t.description ?? t.type,
+    points: t.points,
+    positive: t.points > 0,
+  }));
+
+  // ── Sign out handler ────────────────────────────────────────────────────
+  const handleSignOut = async () => {
+    try { await logoutApi(); } catch (_) {}
+    logout();
+    router.push("/login");
+  };
+
   // Inject profile CSS tokens
   useEffect(() => {
     const styleId = "profile-tokens";
@@ -2091,18 +2154,82 @@ export default function ProfilePage() {
   const handleNavigate = (section: string) => setActiveSection(section);
   const renderSection = () => {
     switch (activeSection) {
-      case "overview": return <OverviewSection onNavigate={handleNavigate} />;
+      case "overview": return (
+        <OverviewSection
+          onNavigate={handleNavigate}
+          firstName={firstName}
+          points={points}
+          plantsCount={plants.length}
+          wishlistItems={wishlistItems}
+        />
+      );
       case "orders": return <OrdersSection onToast={addToast} />;
-      case "wishlist": return <WishlistSection onToast={addToast} />;
-      case "plants": return <PlantsSection onToast={addToast} />;
-      case "personal-info": return <PersonalInfoSection onToast={addToast} />;
-      case "addresses": return <AddressesSection onToast={addToast} />;
-      case "loyalty": return <LoyaltySection onToast={addToast} />;
+      case "wishlist": return (
+        <WishlistSection
+          onToast={addToast}
+          wishlistItems={wishlistItems}
+          onRemove={(id: number) => { removeFromWishlist(id); addToast("Removed from wishlist", "success"); }}
+        />
+      );
+      case "plants": return (
+        <PlantsSection
+          onToast={addToast}
+          plants={plants}
+          onAddPlant={(p: any) => { addPlant(p); addToast("Plant added!", "success"); }}
+          onLogCare={(plantId: number, payload: any) => { addPlantLog({ plantId, payload }); addToast("Care logged!", "success"); }}
+        />
+      );
+      case "personal-info": return (
+        <PersonalInfoSection
+          onToast={addToast}
+          profile={profile}
+          isSaving={isUpdatingProfile}
+          onSave={(data: any) => {
+            updateProfile({
+              first_name: data.firstName,
+              last_name: data.lastName,
+              phone: data.phone || undefined,
+            }, {
+              onSuccess: () => {
+                addToast("Profile updated successfully ✓", "success");
+              },
+              onError: (err: any) => {
+                addToast(err?.response?.data?.detail || "Failed to update profile.", "error");
+              }
+            });
+          }}
+        />
+      );
+      case "addresses": return (
+        <AddressesSection
+          onToast={addToast}
+          addresses={addresses}
+          onAdd={(a: any) => { addAddress(a); addToast("Address added!", "success"); }}
+          onUpdate={(id: number, a: any) => { updateAddress({ id, payload: a }); addToast("Address updated!", "success"); }}
+          onDelete={(id: number) => { deleteAddress(id); addToast("Address removed", "info"); }}
+        />
+      );
+      case "loyalty": return (
+        <LoyaltySection
+          onToast={addToast}
+          loyalty={loyalty}
+          tierMeta={tierMeta}
+          pointsHistory={pointsHistory}
+        />
+      );
       case "payments": return <PaymentSection onToast={addToast} />;
       case "reviews": return <ReviewsSection onToast={addToast} />;
       case "notifications": return <NotificationsSection onToast={addToast} />;
       case "security": return <SecuritySection onToast={addToast} />;
-      default: return <OverviewSection onNavigate={handleNavigate} />;
+      default: return (
+        <OverviewSection
+          onNavigate={handleNavigate}
+          firstName={firstName}
+          points={points}
+          plantsCount={plants.length}
+          wishlistItems={wishlistItems}
+        />
+      );
     }
   };
   return (
@@ -2130,7 +2257,7 @@ export default function ProfilePage() {
               <span style={{ position: "absolute", top: 0, right: 0, width: 16, height: 16, background: "var(--color-surface-raised)", borderRadius: "50%", fontSize: 9, fontWeight: 700, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center" }}>3</span>
             </div>
           </Link>
-          <div className="avatar-chip" title={`${USER.firstName} ${USER.lastName}`}>{USER.initials}</div>
+          <div className="avatar-chip" title={`${firstName} ${lastName}`}>{initials}</div>
         </div>
       </nav>
       {/* Breadcrumb */}
@@ -2152,24 +2279,28 @@ export default function ProfilePage() {
             {/* Avatar */}
             <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12 }}>
               <div style={{ position: "relative", width: 56, height: 56, flexShrink: 0 }}>
-                <div style={{ width: 56, height: 56, borderRadius: "50%", background: "var(--profile-avatar-bg)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, fontWeight: 700, color: "var(--profile-avatar-text)" }}>{USER.initials}</div>
+                <div style={{ width: 56, height: 56, borderRadius: "50%", background: "var(--profile-avatar-bg)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, fontWeight: 700, color: "var(--profile-avatar-text)" }}>
+                  {profileLoading ? "…" : initials}
+                </div>
               </div>
               <div style={{ minWidth: 0 }}>
-                <p style={{ fontSize: 15, fontWeight: 700, color: "var(--profile-heading)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 150 }}>{USER.firstName} {USER.lastName}</p>
-                <p style={{ fontSize: 12, color: "var(--profile-meta)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 150 }}>{USER.email}</p>
+                <p style={{ fontSize: 15, fontWeight: 700, color: "var(--profile-heading)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 150 }}>
+                  {profileLoading ? "Loading…" : `${firstName} ${lastName}`}
+                </p>
+                <p style={{ fontSize: 12, color: "var(--profile-meta)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 150 }}>{userEmail}</p>
               </div>
             </div>
             {/* Tier tag */}
             <span style={{ display: "inline-flex", alignItems: "center", gap: 4, background: "rgba(0,181,102,0.10)", color: "var(--color-surface-raised)", fontSize: 11, fontWeight: 600, padding: "3px 10px", borderRadius: "var(--radius-full)", marginBottom: 10 }}>
-              🌿 {USER.tier}
+              {tierMeta?.emoji ?? "🌱"} {tierLabel}
             </span>
             {/* Loyalty mini bar */}
-            <div title={`${500 - USER.points} more points to Silver`}>
+            <div title={`${points} Green Points`}>
               <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
-                <span style={{ fontSize: 12, fontWeight: 600, color: "var(--color-surface-raised)" }}>{USER.points} Green Points</span>
+                <span style={{ fontSize: 12, fontWeight: 600, color: "var(--color-surface-raised)" }}>{points} Green Points</span>
               </div>
               <div className="loyalty-progress-track" style={{ height: 5 }}>
-                <div className="loyalty-progress-fill" style={{ width: `${(USER.points / 500) * 100}%` }} />
+                <div className="loyalty-progress-fill" style={{ width: `${Math.min((points / 500) * 100, 100)}%` }} />
               </div>
             </div>
           </div>
@@ -2227,7 +2358,7 @@ export default function ProfilePage() {
           footer={
             <>
               <button className="btn-profile-outline" style={{ flex: 1, justifyContent: "center" }} onClick={() => setShowSignOut(false)}>Cancel</button>
-              <button style={{ flex: 1, justifyContent: "center", background: "var(--profile-danger-text)", color: "#fff", border: "none", borderRadius: "var(--radius-full)", height: 44, fontWeight: 700, fontSize: 15, cursor: "pointer", fontFamily: "Outfit" }} onClick={() => { setShowSignOut(false); addToast("You've been signed out.", "info"); }}>Yes, Sign Out</button>
+              <button style={{ flex: 1, justifyContent: "center", background: "var(--profile-danger-text)", color: "#fff", border: "none", borderRadius: "var(--radius-full)", height: 44, fontWeight: 700, fontSize: 15, cursor: "pointer", fontFamily: "Outfit" }} onClick={() => { setShowSignOut(false); handleSignOut(); }}>Yes, Sign Out</button>
             </>
           }>
           <p style={{ fontSize: 14, color: "var(--profile-body)", lineHeight: 1.6 }}>You&apos;ll need to sign in again to access your orders, wishlist, and plants.</p>
