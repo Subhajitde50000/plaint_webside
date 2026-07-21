@@ -893,29 +893,32 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                   display: "flex", alignItems: "center", justifyContent: "center",
                   color: "var(--admin-accent)", fontSize: "12px", fontWeight: 700,
                   flexShrink: 0,
-                }}>PK</div>
+                }}>{adminInitials}</div>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: "12px", fontWeight: 600, color: "var(--admin-text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>Priya K.</div>
-                  <div style={{ fontSize: "11px", color: "var(--admin-accent)", whiteSpace: "nowrap" }}>Super Admin</div>
+                  <div style={{ fontSize: "12px", fontWeight: 600, color: "var(--admin-text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{adminName}</div>
+                  <div style={{ fontSize: "11px", color: "var(--admin-accent)", whiteSpace: "nowrap" }}>{adminRoleFormatted}</div>
                 </div>
               </div>
             )}
 
             {/* Sign out */}
             {!collapsed && (
-              <button style={{
-                width: "100%", display: "flex", alignItems: "center", gap: "8px",
-                padding: "8px 12px", background: "transparent",
-                border: "none", borderRadius: "var(--admin-radius-sm)",
-                cursor: "pointer", color: "var(--admin-text-muted)", fontSize: "12px",
-                transition: "all var(--admin-motion-instant)", marginBottom: "4px",
-              }}
+              <button
+                onClick={logout}
+                style={{
+                  width: "100%", display: "flex", alignItems: "center", gap: "8px",
+                  padding: "8px 12px", background: "transparent",
+                  border: "none", borderRadius: "var(--admin-radius-sm)",
+                  cursor: "pointer", color: "var(--admin-text-muted)", fontSize: "12px",
+                  transition: "all var(--admin-motion-instant)", marginBottom: "4px",
+                }}
                 onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = "var(--admin-error-bg)"; (e.currentTarget as HTMLButtonElement).style.color = "var(--admin-error)"; }}
                 onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = "transparent"; (e.currentTarget as HTMLButtonElement).style.color = "var(--admin-text-muted)"; }}
               >
                 <Icon.LogOut /> Sign Out
               </button>
             )}
+
 
             {/* View store */}
             {!collapsed && (
