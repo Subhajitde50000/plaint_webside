@@ -1,7 +1,39 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from typing import Optional, List
 from decimal import Decimal
 from datetime import datetime
+from app.schemas.customer import AddressSchema
+
+
+class AdminUserMinimalSchema(BaseModel):
+    id: int
+    first_name: str
+    last_name: str
+    email: str
+    role: str
+
+    model_config = {"from_attributes": True}
+
+
+class UserMinimalSchema(BaseModel):
+    id: int
+    first_name: str
+    last_name: str
+    email: str
+    phone: Optional[str] = None
+
+    model_config = {"from_attributes": True}
+
+
+class OrderNoteResponseSchema(BaseModel):
+    id: int
+    note: str
+    is_internal: bool
+    created_at: datetime
+    admin_id: int
+    admin: Optional[AdminUserMinimalSchema] = None
+
+    model_config = {"from_attributes": True}
 
 
 class OrderItemSchema(BaseModel):
@@ -59,8 +91,23 @@ class OrderResponse(BaseModel):
     created_at: datetime
     items: List[OrderItemSchema] = []
     status_history: List[OrderStatusHistorySchema] = []
+    shipping_address: Optional[AddressSchema] = None
+    user: Optional[UserMinimalSchema] = None
+    guest_email: Optional[str] = None
+    guest_phone: Optional[str] = None
+    tags: List[str] = []
 
     model_config = {"from_attributes": True}
+
+    @field_validator("tags", mode="before")
+    @classmethod
+    def serialize_tags(cls, v):
+        if not v:
+            return []
+        if isinstance(v, list) and len(v) > 0 and hasattr(v[0], "tag"):
+            return [t.tag for t in v]
+        return v
+
 
 
 class CreateOrderRequest(BaseModel):
@@ -106,6 +153,7 @@ class AdminOrderDetailResponse(OrderResponse):
     razorpay_payment_id: Optional[str] = None
     shiprocket_order_id: Optional[str] = None
     awb_code: Optional[str] = None
+    notes_list: List[OrderNoteResponseSchema] = []
 
     model_config = {"from_attributes": True}
 
@@ -124,3 +172,16 @@ class RefundRequest(BaseModel):
     amount: Decimal
     reason: Optional[str] = None
     type: str = "partial"
+
+
+class UpdateTrackingRequest(BaseModel):
+    tracking_number: str
+    carrier: str
+
+
+class AssignCourierRequest(BaseModel):
+    carrier: str
+
+
+class AddTagRequest(BaseModel):
+    tag: str

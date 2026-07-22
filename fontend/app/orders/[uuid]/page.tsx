@@ -342,6 +342,8 @@ export default function OrderDetailPage() {
   const { order, isLoading, isError, isFetching } = useOrder(orderUuid);
   const { cancelOrder, isCancelling, isSuccess: cancelDone } = useCancelOrder(orderUuid);
   const { requestReturn, isRequesting, isSuccess: returnDone } = useReturnOrder(orderUuid);
+  const orderItems = Array.isArray(order?.items) ? order.items : [];
+  const statusHistory = Array.isArray(order?.status_history) ? order.status_history : [];
 
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [showReturnModal, setShowReturnModal] = useState(false);
@@ -536,13 +538,13 @@ export default function OrderDetailPage() {
             </SectionCard>
 
             {/* Items */}
-            <SectionCard title={`Items (${order.items.length})`}>
+            <SectionCard title={`Items (${orderItems.length})`}>
               <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-                {order.items.map((item, idx) => (
+                {orderItems.map((item, idx) => (
                   <div key={item.id ?? idx} style={{
                     display: "flex", alignItems: "center", gap: 14,
-                    paddingBottom: idx < order.items.length - 1 ? 16 : 0,
-                    borderBottom: idx < order.items.length - 1 ? `1px solid ${T.border}` : "none",
+                    paddingBottom: idx < orderItems.length - 1 ? 16 : 0,
+                    borderBottom: idx < orderItems.length - 1 ? `1px solid ${T.border}` : "none",
                   }}>
                     {/* Image */}
                     <div style={{
@@ -631,10 +633,10 @@ export default function OrderDetailPage() {
             </SectionCard>
 
             {/* Status History */}
-            {order.status_history.length > 0 && (
+            {statusHistory.length > 0 && (
               <SectionCard title="Order Timeline">
                 <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-                  {[...order.status_history].reverse().map((entry, idx) => (
+                  {[...statusHistory].reverse().map((entry, idx) => (
                     <div key={idx} style={{ display: "flex", gap: 14, alignItems: "flex-start" }}>
                       <div style={{
                         width: 32, height: 32, borderRadius: "50%",

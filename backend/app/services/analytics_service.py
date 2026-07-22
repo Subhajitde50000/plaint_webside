@@ -48,6 +48,47 @@ class AnalyticsService:
         ).scalar() or 0
         return_rate = (cancelled / orders * 100) if orders > 0 else 0
 
+        today = date.today()
+        yesterday = today - timedelta(days=1)
+
+        revenue_today = self.db.query(func.sum(Order.total)).filter(
+            Order.payment_status == "paid",
+            func.date(Order.created_at) == today,
+        ).scalar() or 0
+
+        orders_today = self.db.query(func.count(Order.id)).filter(
+            func.date(Order.created_at) == today,
+        ).scalar() or 0
+
+        shipped_today = self.db.query(func.count(Order.id)).filter(
+            Order.status.in_(["dispatched", "delivered"]),
+            func.date(Order.created_at) == today,
+        ).scalar() or 0
+
+        cancelled_today = self.db.query(func.count(Order.id)).filter(
+            Order.status == "cancelled",
+            func.date(Order.created_at) == today,
+        ).scalar() or 0
+
+        revenue_yesterday = self.db.query(func.sum(Order.total)).filter(
+            Order.payment_status == "paid",
+            func.date(Order.created_at) == yesterday,
+        ).scalar() or 0
+
+        orders_yesterday = self.db.query(func.count(Order.id)).filter(
+            func.date(Order.created_at) == yesterday,
+        ).scalar() or 0
+
+        shipped_yesterday = self.db.query(func.count(Order.id)).filter(
+            Order.status.in_(["dispatched", "delivered"]),
+            func.date(Order.created_at) == yesterday,
+        ).scalar() or 0
+
+        cancelled_yesterday = self.db.query(func.count(Order.id)).filter(
+            Order.status == "cancelled",
+            func.date(Order.created_at) == yesterday,
+        ).scalar() or 0
+
         return {
             "period": {"from": str(date_from), "to": str(date_to)},
             "revenue": float(revenue),
@@ -56,6 +97,14 @@ class AnalyticsService:
             "aov": round(aov, 2),
             "units_sold": int(units),
             "return_rate": round(return_rate, 2),
+            "revenue_today": float(revenue_today),
+            "orders_today": int(orders_today),
+            "shipped_today": int(shipped_today),
+            "cancelled_today": int(cancelled_today),
+            "revenue_yesterday": float(revenue_yesterday),
+            "orders_yesterday": int(orders_yesterday),
+            "shipped_yesterday": int(shipped_yesterday),
+            "cancelled_yesterday": int(cancelled_yesterday),
         }
 
     def get_top_products(

@@ -114,7 +114,22 @@ async def list_my_orders(
             "status": o.status,
             "payment_status": o.payment_status,
             "created_at": o.created_at.isoformat(),
+            "shipping_amount": str(o.shipping_amount),
+            "tracking_number": o.tracking_number,
+            "shipping_carrier": o.shipping_carrier,
+            "tracking_url": o.tracking_url,
             "items_count": len(o.items),
+            "items": [
+                {
+                    "title": item.title,
+                    "variant_title": item.variant_title,
+                    "quantity": item.quantity,
+                    "unit_price": str(item.unit_price),
+                    "total_price": str(item.total_price),
+                    "image_url": item.image_url,
+                }
+                for item in o.items
+            ]
         }
         for o in result["items"]
     ]

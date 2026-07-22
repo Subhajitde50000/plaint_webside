@@ -229,6 +229,7 @@ class OrderNote(Base):
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
 
     order = relationship("Order", back_populates="notes_list")
+    admin = relationship("AdminUser")
 
 
 class OrderTag(Base):

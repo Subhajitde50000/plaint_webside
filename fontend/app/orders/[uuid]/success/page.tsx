@@ -108,6 +108,7 @@ export default function OrderSuccessPage() {
   const orderUuid = params?.uuid as string;
   const { order, isLoading } = useOrder(orderUuid);
   const [mounted, setMounted] = useState(false);
+  const orderItems = Array.isArray(order?.items) ? order.items : [];
 
   useEffect(() => {
     // Trigger entrance animation
@@ -220,7 +221,7 @@ export default function OrderSuccessPage() {
             }}>
               {/* Items */}
               <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 14 }}>
-                {order.items.slice(0, 3).map((item, idx) => (
+                {orderItems.slice(0, 3).map((item, idx) => (
                   <div key={idx} style={{ display: "flex", justifyContent: "space-between", fontSize: 13 }}>
                     <span style={{ color: T.body, fontWeight: 600 }}>
                       {item.title} {item.variant_title ? `(${item.variant_title})` : ""}
@@ -231,9 +232,9 @@ export default function OrderSuccessPage() {
                     </span>
                   </div>
                 ))}
-                {order.items.length > 3 && (
+                {orderItems.length > 3 && (
                   <div style={{ fontSize: 12, color: T.muted }}>
-                    +{order.items.length - 3} more item{order.items.length - 3 !== 1 ? "s" : ""}
+                    +{orderItems.length - 3} more item{orderItems.length - 3 !== 1 ? "s" : ""}
                   </div>
                 )}
               </div>

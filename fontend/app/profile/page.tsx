@@ -11,6 +11,9 @@ import { useAuthStore } from "@/store/auth.store";
 import { useRouter } from "next/navigation";
 import { logoutApi } from "@/features/auth/api/auth.api";
 import Link from "next/link";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMyOrders } from "@/features/orders/hooks/useMyOrders";
+import { cancelOrderApi, returnOrderApi } from "@/features/orders/api/orders.api";
 /* ─────────────────────────────────────────────
    DESIGN TOKENS (CSS-in-JS via style injection)
 ───────────────────────────────────────────── */
@@ -694,7 +697,6 @@ const TOKENS = `
    DATA (mock)
 ───────────────────────────────────────────── */
 // ── Static fallbacks (used only before real API data arrives) ─────────────────
-const ORDERS: any[] = [];
 const NOTIFICATIONS = [
   { id: 1, icon: "🚚", title: "Your order has been shipped!", body: "Check your orders for details.", time: "recently", read: false },
   { id: 2, icon: "💧", title: "Time to water a plant!", body: "Check your plant diary.", time: "1 day ago", read: false },
@@ -818,21 +820,22 @@ function ToggleSwitch({ checked, onChange, label }: { checked: boolean; onChange
    SECTION: OVERVIEW DASHBOARD
 ───────────────────────────────────────────── */
 function OverviewSection({
-  onNavigate, firstName, points, plantsCount, wishlistItems,
+  onNavigate, firstName, points, plantsCount, wishlistItems, ordersCount, recentOrder,
 }: {
   onNavigate: (s: string) => void;
   firstName: string;
   points: number;
   plantsCount: number;
   wishlistItems: any[];
+  ordersCount: number;
+  recentOrder: any | null;
 }) {
   const stats = [
-    { value: ORDERS.length, label: "Orders", section: "orders", icon: "📦" },
+    { value: ordersCount, label: "Orders", section: "orders", icon: "📦" },
     { value: plantsCount, label: "Plants", section: "plants", icon: "🌿" },
     { value: points, label: "Points", section: "loyalty", icon: "🏅" },
     { value: 0, label: "Reviews", section: "reviews", icon: "⭐" },
   ];
-  const recentOrder = ORDERS[0];
   return (
     <section aria-label="Overview" style={{ animation: "slideUp var(--motion-normal) ease" }}>
       {/* Welcome header */}
@@ -863,7 +866,7 @@ function OverviewSection({
             <h3 style={{ fontSize: 16, fontWeight: 700, color: "var(--profile-heading)" }}>Recent Order</h3>
             <button onClick={() => onNavigate("orders")} style={{ background: "none", border: "none", color: "var(--color-surface-raised)", fontWeight: 600, fontSize: 13, cursor: "pointer", fontFamily: "Outfit" }}>View All Orders →</button>
           </div>
-          <p style={{ fontSize: 14, color: "var(--profile-meta)" }}>Order #{recentOrder.id}</p>
+          <p style={{ fontSize: 14, color: "var(--profile-meta)" }}>Order #{recentOrder.order_number || recentOrder.id}</p>
         </div>
       ) : (
         <div className="profile-card" style={{ marginBottom: 16 }}>
@@ -926,34 +929,123 @@ function OverviewSection({
 /* ─────────────────────────────────────────────
    SECTION: MY ORDERS
 ───────────────────────────────────────────── */
+function normalizeOrderStatus(status: string): string {
+  if (status === "cancelled") return "cancelled";
+  if (status === "return_received" || status === "refunded") return "returned";
+  if (status === "dispatched" || status === "in_transit" || status === "out_for_delivery") return "shipped";
+  if (status === "delivered") return "delivered";
+  return "processing"; // order_placed, payment_confirmed, processing, packed
+}
+
 function OrdersSection({ onToast }: { onToast: (msg: string, t?: ToastType["type"]) => void }) {
+  const { orders, isLoading } = useMyOrders(1);
   const [activeTab, setActiveTab] = useState("all");
   const [search, setSearch] = useState("");
   const [expandedItems, setExpandedItems] = useState<Record<string, boolean>>({});
-  const [trackingOrder, setTrackingOrder] = useState<typeof ORDERS[0] | null>(null);
+  const [trackingOrder, setTrackingOrder] = useState<any | null>(null);
+  
+  const qc = useQueryClient();
+
+  const cancelMutation = useMutation({
+    mutationFn: ({ uuid, reason }: { uuid: string; reason: string }) => cancelOrderApi(uuid, reason),
+    onSuccess: () => {
+      onToast("Order cancelled successfully.", "success");
+      qc.invalidateQueries({ queryKey: ["orders"] });
+    },
+    onError: (err: any) => {
+      onToast(err?.response?.data?.detail || "Failed to cancel order.", "error");
+    }
+  });
+
+  const returnMutation = useMutation({
+    mutationFn: ({ uuid, payload }: { uuid: string; payload: any }) => returnOrderApi(uuid, payload),
+    onSuccess: () => {
+      onToast("Return request submitted successfully.", "success");
+      qc.invalidateQueries({ queryKey: ["orders"] });
+    },
+    onError: (err: any) => {
+      onToast(err?.response?.data?.detail || "Failed to request return.", "error");
+    }
+  });
+
+  const handleCancelOrder = (uuid: string) => {
+    const reason = prompt("Please enter a reason for cancelling this order:");
+    if (reason === null) return;
+    if (!reason.trim()) {
+      onToast("A reason is required to cancel the order.", "error");
+      return;
+    }
+    cancelMutation.mutate({ uuid, reason });
+  };
+
+  const handleReturnOrder = (uuid: string) => {
+    const reason = prompt("Please enter a reason for returning this order:");
+    if (reason === null) return;
+    if (!reason.trim()) {
+      onToast("A reason is required to request a return.", "error");
+      return;
+    }
+    returnMutation.mutate({ uuid, payload: { reason, return_type: "refund" } });
+  };
+
   const tabs = ["all", "active", "delivered", "cancelled"];
-  const filtered = ORDERS.filter((o: any) => {
+
+  const normalizedOrders = orders.map((o: any) => {
+    const status = normalizeOrderStatus(o.status);
+    const dateFormatted = new Date(o.created_at).toLocaleDateString("en-IN", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric"
+    });
+    
+    return {
+      id: o.order_number,
+      uuid: o.uuid,
+      status,
+      date: dateFormatted,
+      delivery: o.shipping_amount === "0.00" || o.shipping_amount === "0" ? "₹0" : `₹${parseFloat(o.shipping_amount)}`,
+      total: `₹${parseFloat(o.total).toLocaleString("en-IN")}`,
+      tracking_number: o.tracking_number,
+      shipping_carrier: o.shipping_carrier,
+      tracking_url: o.tracking_url,
+      items: (o.items || []).map((item: any) => ({
+        name: item.title,
+        variant: item.variant_title || "Standard",
+        price: `₹${parseFloat(item.unit_price).toLocaleString("en-IN")}`,
+        qty: item.quantity,
+        img: "🌱",
+        imageUrl: item.image_url
+      }))
+    };
+  });
+
+  const filtered = normalizedOrders.filter((o: any) => {
     if (activeTab === "active") return o.status === "processing" || o.status === "shipped";
     if (activeTab !== "all") return o.status === activeTab;
     return true;
-  }).filter((o: any) => o.id.toLowerCase().includes(search.toLowerCase()) || o.items.some((i: any) => i.name.toLowerCase().includes(search.toLowerCase())));
+  }).filter((o: any) => 
+    o.id.toLowerCase().includes(search.toLowerCase()) || 
+    o.items.some((i: any) => i.name.toLowerCase().includes(search.toLowerCase()))
+  ).slice(0, 5);
+
   const TRACKING_STEPS = [
-    { label: "Order Placed", time: "15 Jun — 10:24 AM", status: "completed" },
-    { label: "Packed", time: "15 Jun — 2:48 PM", status: "completed" },
-    { label: "Dispatched", time: "16 Jun — 9:00 AM", status: "completed" },
-    { label: "Out for Delivery", time: "17 Jun", status: "current" },
-    { label: "Delivered", time: "18 Jun", status: "pending" },
+    { label: "Order Placed", time: "Completed", status: "completed" },
+    { label: "Packed", time: "Completed", status: "completed" },
+    { label: "Dispatched", time: trackingOrder?.shipping_carrier ? `Carrier: ${trackingOrder.shipping_carrier}` : "Completed", status: "completed" },
+    { label: "Out for Delivery", time: "In Transit", status: "current" },
+    { label: "Delivered", time: "Pending", status: "pending" },
   ];
+
   return (
     <section aria-label="My Orders" style={{ animation: "slideUp var(--motion-normal) ease" }}>
       <div className="section-hdr">
-        <h2 className="section-title-lg">My Orders <span className="section-count">({ORDERS.length})</span></h2>
+        <h2 className="section-title-lg">Recent Orders <span className="section-count">(last 5)</span></h2>
       </div>
       {/* Filter tabs */}
       <div className="filter-tabs" role="tablist" aria-label="Order filters" style={{ marginBottom: 16 }}>
         {tabs.map(t => (
           <button key={t} className={`filter-tab ${activeTab === t ? "active" : ""}`} role="tab" aria-selected={activeTab === t} onClick={() => setActiveTab(t)}>
-            {t.charAt(0).toUpperCase() + t.slice(1)} {t === "all" ? `(${ORDERS.length})` : t === "delivered" ? "(8)" : t === "active" ? "(2)" : "(2)"}
+            {t.charAt(0).toUpperCase() + t.slice(1)}
           </button>
         ))}
       </div>
@@ -971,7 +1063,9 @@ function OrdersSection({ onToast }: { onToast: (msg: string, t?: ToastType["type
         </select>
       </div>
       {/* Order cards */}
-      {filtered.length === 0 ? (
+      {isLoading ? (
+        <div style={{ display: "flex", justifyContent: "center", padding: 40, color: "var(--profile-meta)" }}>Loading your orders...</div>
+      ) : filtered.length === 0 ? (
         <div className="empty-state">
           <div className="empty-state-icon">📦</div>
           <h3>No orders yet</h3>
@@ -987,7 +1081,9 @@ function OrdersSection({ onToast }: { onToast: (msg: string, t?: ToastType["type
             <div key={order.id} className="profile-card" style={{ marginBottom: 16 }}>
               {/* Header */}
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14, gap: 8, flexWrap: "wrap" }}>
-                <span style={{ fontSize: 15, fontWeight: 700, color: "var(--profile-heading)" }}>Order #{order.id}</span>
+                <a href={`/orders/${order.uuid}`} target="_blank" rel="noopener noreferrer" style={{ textDecoration: "none" }}>
+                  <span style={{ fontSize: 15, fontWeight: 700, color: "var(--color-surface-raised)", cursor: "pointer" }}>Order #{order.id} ↗</span>
+                </a>
                 <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                   <span style={{ fontSize: 9, color: "var(--profile-meta)" }}>{order.date}</span>
                   <span className={`badge-status ${si.cls}`} aria-label={`Order status: ${si.label}`}>{si.icon} {si.label}</span>
@@ -996,7 +1092,9 @@ function OrdersSection({ onToast }: { onToast: (msg: string, t?: ToastType["type
               {/* Items */}
               {visibleItems.map((item: any, i: number) => (
                 <div key={i} style={{ display: "flex", gap: 12, paddingBottom: 12, borderBottom: i < visibleItems.length - 1 ? "1px solid var(--profile-divider)" : "none", marginBottom: i < visibleItems.length - 1 ? 12 : 0, alignItems: "center" }}>
-                  <div style={{ width: 56, height: 56, borderRadius: "var(--radius-sm)", background: "rgba(0,181,102,0.06)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 24, flexShrink: 0, border: "1px solid var(--profile-divider)" }}>{item.img}</div>
+                  <div style={{ width: 56, height: 56, borderRadius: "var(--radius-sm)", background: "rgba(0,181,102,0.06)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 24, flexShrink: 0, border: "1px solid var(--profile-divider)", overflow: "hidden" }}>
+                    {item.imageUrl ? <img src={item.imageUrl} alt={item.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : item.img}
+                  </div>
                   <div style={{ flex: 1 }}>
                     <p style={{ fontSize: 14, fontWeight: 600, color: "var(--profile-heading)" }}>{item.name}</p>
                     <p style={{ fontSize: 12, color: "var(--profile-meta)" }}>— {item.variant}</p>
@@ -1022,13 +1120,21 @@ function OrdersSection({ onToast }: { onToast: (msg: string, t?: ToastType["type
                 )}
                 {order.status === "delivered" && <button className="btn-profile-outline" style={{ height: 38, fontSize: 13 }} onClick={() => onToast("Review submitted! Thank you.", "success")}>Write a Review</button>}
                 <button className="btn-profile-outline" style={{ height: 38, fontSize: 13 }} onClick={() => onToast("Items added to cart!", "success")}>Buy Again</button>
-                {order.status === "delivered" && <button style={{ background: "none", border: "none", color: "var(--profile-danger-text)", fontSize: 13, cursor: "pointer", fontFamily: "Outfit", fontWeight: 500, padding: "0 8px" }}>Return / Exchange</button>}
-                {order.status === "processing" && <button style={{ background: "none", border: "none", color: "var(--profile-danger-text)", fontSize: 13, cursor: "pointer", fontFamily: "Outfit", fontWeight: 500, padding: "0 8px" }} onClick={() => onToast("Cancellation requested.", "info")}>Cancel Order</button>}
+                {order.status === "delivered" && <button style={{ background: "none", border: "none", color: "var(--profile-danger-text)", fontSize: 13, cursor: "pointer", fontFamily: "Outfit", fontWeight: 500, padding: "0 8px" }} onClick={() => handleReturnOrder(order.uuid)}>Return / Exchange</button>}
+                {order.status === "processing" && <button style={{ background: "none", border: "none", color: "var(--profile-danger-text)", fontSize: 13, cursor: "pointer", fontFamily: "Outfit", fontWeight: 500, padding: "0 8px" }} onClick={() => handleCancelOrder(order.uuid)}>Cancel Order</button>}
               </div>
             </div>
           );
         })
       )}
+      {/* View All Orders Button */}
+      <div style={{ display: "flex", justifyContent: "center", marginTop: 24 }}>
+        <a href="/orders" style={{ textDecoration: "none" }}>
+          <button className="btn-profile-outline" style={{ padding: "10px 24px", display: "flex", alignItems: "center", gap: 8 }}>
+            View All Orders
+          </button>
+        </a>
+      </div>
       {/* Tracking Modal */}
       {trackingOrder && (
         <Modal title={`Order #${trackingOrder.id} — Tracking`} onClose={() => setTrackingOrder(null)} maxWidth={520}>
@@ -1048,8 +1154,16 @@ function OrdersSection({ onToast }: { onToast: (msg: string, t?: ToastType["type
             ))}
           </div>
           <div style={{ marginTop: 20, paddingTop: 16, borderTop: "1px solid var(--profile-divider)" }}>
-            <p style={{ fontSize: 13, color: "var(--profile-meta)" }}>Carrier: Shiprocket · Tracking ID: SR-8821</p>
-            <button className="btn-profile-outline" style={{ marginTop: 10, fontSize: 13 }}>View on Carrier Site ↗</button>
+            <p style={{ fontSize: 13, color: "var(--profile-meta)", marginBottom: 10 }}>
+              Carrier: <strong style={{ color: "var(--profile-heading)" }}>{trackingOrder.shipping_carrier || "Shiprocket"}</strong>
+              <br />
+              Tracking ID: <strong style={{ color: "var(--profile-heading)" }}>{trackingOrder.tracking_number || "Pending"}</strong>
+            </p>
+            {trackingOrder.tracking_url && (
+              <a href={trackingOrder.tracking_url} target="_blank" rel="noopener noreferrer">
+                <button className="btn-profile-outline" style={{ marginTop: 10, fontSize: 13 }}>View on Carrier Site ↗</button>
+              </a>
+            )}
           </div>
         </Modal>
       )}
@@ -2116,6 +2230,7 @@ export default function ProfilePage() {
   const { plants } = useMyPlants();
   const { addPlant } = useAddPlant();
   const { addLog: addPlantLog } = useAddPlantLog();
+  const { orders: myOrders, total: myOrdersTotal } = useMyOrders(1);
 
   // ── Derived user display values ─────────────────────────────────────────
   const firstName   = profile?.first_name ?? "";
@@ -2161,6 +2276,8 @@ export default function ProfilePage() {
           points={points}
           plantsCount={plants.length}
           wishlistItems={wishlistItems}
+          ordersCount={myOrdersTotal}
+          recentOrder={myOrders[0] ?? null}
         />
       );
       case "orders": return <OrdersSection onToast={addToast} />;
@@ -2228,6 +2345,8 @@ export default function ProfilePage() {
           points={points}
           plantsCount={plants.length}
           wishlistItems={wishlistItems}
+          ordersCount={myOrdersTotal}
+          recentOrder={myOrders[0] ?? null}
         />
       );
     }
