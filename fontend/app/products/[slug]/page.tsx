@@ -400,6 +400,17 @@ export default function ProductDetailPage({ params }: PageProps) {
     toastTimer.current = setTimeout(() => setToastVisible(false), 2500);
   };
 
+  const [notifyEmail, setNotifyEmail] = useState("");
+  const [isNotified, setIsNotified] = useState(false);
+  const handleNotifyMe = () => {
+    if (!notifyEmail || !notifyEmail.includes("@")) {
+      alert("Please enter a valid email address.");
+      return;
+    }
+    setIsNotified(true);
+    setNotifyEmail("");
+  };
+
   // Map real product data to layout expected fields
   const p = useMemo(() => {
     if (!product) return null;
@@ -463,30 +474,23 @@ export default function ProductDetailPage({ params }: PageProps) {
           level: c.difficulty_level,
           desc: c.value + (c.detail ? ` — ${c.detail}` : "")
         }))
-      : [
-          { title: "Light", icon: "☀️", level: 3, desc: product.care_light || "Indirect bright sunlight is best." },
-          { title: "Watering", icon: "💧", level: 2, desc: product.care_water || "Water when top soil feels dry." }
-        ];
+      : [];
 
     // Specs mapping
     const specs = product.specifications?.length > 0
       ? product.specifications.map((s) => ({ label: s.label, value: s.value }))
       : [
-          { label: "Botanical Name", value: product.botanical_name || "N/A" },
-          { label: "Common Name", value: product.common_name || "N/A" },
-          { label: "Pet Friendly", value: product.is_pet_friendly ? "Yes" : "No" },
-          { label: "Air Purifying", value: product.is_air_purifying ? "Yes" : "No" },
-          { label: "Care Skill", value: product.care_skill || "Beginner" }
+          ...(product.botanical_name ? [{ label: "Botanical Name", value: product.botanical_name }] : []),
+          ...(product.common_name ? [{ label: "Common Name", value: product.common_name }] : []),
+          ...(product.is_pet_friendly !== undefined && product.is_pet_friendly !== null ? [{ label: "Pet Friendly", value: product.is_pet_friendly ? "Yes" : "No" }] : []),
+          ...(product.is_air_purifying !== undefined && product.is_air_purifying !== null ? [{ label: "Air Purifying", value: product.is_air_purifying ? "Yes" : "No" }] : []),
+          ...(product.care_skill ? [{ label: "Care Skill", value: product.care_skill }] : [])
         ];
 
     // Features mapping
     const features = product.features?.length > 0
       ? product.features.map((f) => f.feature)
-      : [
-          "Air-purifying qualities to clean indoor spaces",
-          "Thrives under moderate indirect light",
-          "Low-maintenance and easy to grow",
-        ];
+      : [];
 
     // Care quick chips
     const care = [
@@ -504,10 +508,7 @@ export default function ProductDetailPage({ params }: PageProps) {
           icon: "🏺",
           slug: pu.pot_product.slug
         }))
-      : [
-          { name: "Terracotta Pot", price: 349, icon: "🏺", slug: "terracotta-pot" },
-          { name: "White Ceramic Pot", price: 499, icon: "🫙", slug: "white-ceramic-pot" }
-        ];
+      : [];
 
     // Related products
     const related = (relatedData?.items ?? []).map((item) => ({
@@ -920,7 +921,7 @@ export default function ProductDetailPage({ params }: PageProps) {
               </p>
               {/* Stock status indicator */}
               <div style={{ marginTop: "12px" }}>
-                {isCheckoutDisabled ? (
+                {availableStock <= 0 ? (
                   <div style={{
                     display: "inline-flex", alignItems: "center", gap: "6px",
                     background: "#fdf2f2", border: "1px solid #fbd5d5",
@@ -930,17 +931,7 @@ export default function ProductDetailPage({ params }: PageProps) {
                   }}>
                     <span>🔴 Out of Stock</span>
                   </div>
-                ) : isOutOfStock ? (
-                  <div style={{
-                    display: "inline-flex", alignItems: "center", gap: "6px",
-                    background: "#fffbeb", border: "1px solid #fef3c7",
-                    borderRadius: "6px", padding: "6px 12px",
-                    color: "#d97706", fontSize: "13px", fontWeight: 600,
-                    fontFamily: "Poppins, sans-serif"
-                  }}>
-                    <span>🟡 {stockPolicy === 'backorder' ? 'Available on Backorder (Ships in 7-10 days)' : 'Pre-order available'}</span>
-                  </div>
-                ) : isLowStock ? (
+                ) : availableStock === 1 ? (
                   <div style={{
                     display: "inline-flex", alignItems: "center", gap: "6px",
                     background: "#fffaf0", border: "1px solid #feebc8",
@@ -948,7 +939,17 @@ export default function ProductDetailPage({ params }: PageProps) {
                     color: "#dd6b20", fontSize: "13px", fontWeight: 600,
                     fontFamily: "Poppins, sans-serif"
                   }}>
-                    <span>🔥 Only {availableStock} left in stock - order soon!</span>
+                    <span>🔥 Only one left!</span>
+                  </div>
+                ) : availableStock > 1 && availableStock <= 5 ? (
+                  <div style={{
+                    display: "inline-flex", alignItems: "center", gap: "6px",
+                    background: "#fffaf0", border: "1px solid #feebc8",
+                    borderRadius: "6px", padding: "6px 12px",
+                    color: "#dd6b20", fontSize: "13px", fontWeight: 600,
+                    fontFamily: "Poppins, sans-serif"
+                  }}>
+                    <span>🔥 Only few left!</span>
                   </div>
                 ) : (
                   <div style={{
@@ -1090,41 +1091,43 @@ export default function ProductDetailPage({ params }: PageProps) {
 
             {/* Qty + Wishlist */}
             <div style={{ display: "flex", alignItems: "center", gap: "14px", marginBottom: "20px" }}>
-              <div style={{
-                display: "flex", alignItems: "center",
-                border: "2px solid rgba(45,90,39,0.20)", borderRadius: "var(--radius-full)",
-                background: "white", overflow: "hidden",
-              }}>
-                <button
-                  onClick={() => setQty((q) => Math.max(1, q - 1))}
-                  aria-label="Decrease quantity"
-                  style={{
-                    width: "44px", height: "44px", border: "none", background: "none",
-                    cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
-                    color: "var(--color-green-dark)", transition: "background 0.15s",
-                  }}
-                  onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-green-pale)")}
-                  onMouseLeave={(e) => (e.currentTarget.style.background = "none")}
-                >
-                  <MinusIcon />
-                </button>
-                <span style={{ fontFamily: "Poppins, sans-serif", fontWeight: 600, fontSize: "16px", minWidth: "40px", textAlign: "center", color: "var(--color-text-primary)" }}>
-                  {qty}
-                </span>
-                <button
-                  onClick={() => setQty((q) => q + 1)}
-                  aria-label="Increase quantity"
-                  style={{
-                    width: "44px", height: "44px", border: "none", background: "none",
-                    cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
-                    color: "var(--color-green-dark)", transition: "background 0.15s",
-                  }}
-                  onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-green-pale)")}
-                  onMouseLeave={(e) => (e.currentTarget.style.background = "none")}
-                >
-                  <PlusIcon />
-                </button>
-              </div>
+              {availableStock > 0 && (
+                <div style={{
+                  display: "flex", alignItems: "center",
+                  border: "2px solid rgba(45,90,39,0.20)", borderRadius: "var(--radius-full)",
+                  background: "white", overflow: "hidden",
+                }}>
+                  <button
+                    onClick={() => setQty((q) => Math.max(1, q - 1))}
+                    aria-label="Decrease quantity"
+                    style={{
+                      width: "44px", height: "44px", border: "none", background: "none",
+                      cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
+                      color: "var(--color-green-dark)", transition: "background 0.15s",
+                    }}
+                    onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-green-pale)")}
+                    onMouseLeave={(e) => (e.currentTarget.style.background = "none")}
+                  >
+                    <MinusIcon />
+                  </button>
+                  <span style={{ fontFamily: "Poppins, sans-serif", fontWeight: 600, fontSize: "16px", minWidth: "40px", textAlign: "center", color: "var(--color-text-primary)" }}>
+                    {qty}
+                  </span>
+                  <button
+                    onClick={() => setQty((q) => q + 1)}
+                    aria-label="Increase quantity"
+                    style={{
+                      width: "44px", height: "44px", border: "none", background: "none",
+                      cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
+                      color: "var(--color-green-dark)", transition: "background 0.15s",
+                    }}
+                    onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-green-pale)")}
+                    onMouseLeave={(e) => (e.currentTarget.style.background = "none")}
+                  >
+                    <PlusIcon />
+                  </button>
+                </div>
+              )}
 
               {/* Wishlist */}
               <button
@@ -1167,55 +1170,106 @@ export default function ProductDetailPage({ params }: PageProps) {
 
             {/* CTA buttons */}
             <div style={{ display: "flex", flexDirection: "column", gap: "12px", marginBottom: "20px" }}>
-              <button
-                id="add-to-cart-btn"
-                onClick={handleAddToCart}
-                disabled={isAddingItem || isCheckoutDisabled}
-                aria-busy={isAddingItem}
-                className="btn-primary"
-                style={{
-                  width: "100%", justifyContent: "center", fontSize: "16px", padding: "16px 32px",
-                  opacity: (isAddingItem || isCheckoutDisabled) ? 0.7 : 1,
-                  cursor: isCheckoutDisabled ? "not-allowed" : "pointer"
-                }}
-              >
-                <CartIcon /> {isAddingItem
-                  ? "Adding to Cart..."
-                  : isCheckoutDisabled
-                  ? "Out of Stock"
-                  : isOutOfStock
-                  ? (stockPolicy === 'backorder' ? "Backorder" : "Pre-order")
-                  : "Add to Cart"}
-              </button>
-              <button
-                type="button"
-                id="buy-now-btn"
-                onClick={handleBuyNow}
-                disabled={isCheckoutDisabled}
-                style={{
-                  width: "100%", display: "flex", alignItems: "center", justifyContent: "center",
-                  fontFamily: "Poppins, sans-serif", fontWeight: 600, fontSize: "16px",
-                  padding: "14px 32px", borderRadius: "var(--radius-xl)",
-                  border: `2px solid ${isCheckoutDisabled ? "var(--color-text-secondary)" : "var(--color-green-dark)"}`,
-                  color: isCheckoutDisabled ? "var(--color-text-secondary)" : "var(--color-green-dark)",
-                  background: "transparent",
-                  cursor: isCheckoutDisabled ? "not-allowed" : "pointer",
-                  transition: "all 0.25s ease",
-                  opacity: isCheckoutDisabled ? 0.6 : 1,
-                }}
-                onMouseEnter={(e) => {
-                  if (!isCheckoutDisabled) e.currentTarget.style.background = "var(--color-green-pale)";
-                }}
-                onMouseLeave={(e) => {
-                  if (!isCheckoutDisabled) e.currentTarget.style.background = "transparent";
-                }}
-              >
-                {isCheckoutDisabled
-                  ? "Out of Stock"
-                  : isOutOfStock
-                  ? (stockPolicy === 'backorder' ? "Buy Now (Backorder)" : "Buy Now (Pre-order)")
-                  : "Buy Now"}
-              </button>
+              {availableStock <= 0 ? (
+                <div style={{
+                  background: "#fffaf0", border: "1px solid #feebc8",
+                  borderRadius: "var(--radius-md)", padding: "16px 20px",
+                  display: "flex", flexDirection: "column", gap: "12px"
+                }}>
+                  <p style={{
+                    fontFamily: "Poppins, sans-serif", fontWeight: 600, fontSize: "14px",
+                    color: "var(--color-green-dark)", margin: 0
+                  }}>
+                    🔔 Notify Me When Back in Stock
+                  </p>
+                  <p style={{ fontFamily: "DM Sans, sans-serif", fontSize: "13px", color: "var(--color-text-secondary)", margin: 0 }}>
+                    Enter your email to receive an alert when this item is restocked.
+                  </p>
+                  <div style={{ display: "flex", gap: "8px" }}>
+                    <input
+                      type="email"
+                      placeholder="name@example.com"
+                      value={notifyEmail}
+                      onChange={(e) => setNotifyEmail(e.target.value)}
+                      style={{
+                        flex: 1, padding: "10px 14px", borderRadius: "var(--radius-xl)",
+                        border: "1px solid rgba(45,90,39,0.25)", outline: "none",
+                        fontFamily: "DM Sans, sans-serif", fontSize: "14px",
+                        background: "white", color: "var(--color-text-primary)"
+                      }}
+                    />
+                    <button
+                      type="button"
+                      onClick={handleNotifyMe}
+                      style={{
+                        padding: "10px 20px", borderRadius: "var(--radius-xl)",
+                        background: "var(--color-green-dark)", color: "white",
+                        fontFamily: "Poppins, sans-serif", fontWeight: 600, fontSize: "14px",
+                        border: "none", cursor: "pointer"
+                      }}
+                    >
+                      Notify
+                    </button>
+                  </div>
+                  {isNotified && (
+                    <p style={{ fontFamily: "Poppins, sans-serif", fontWeight: 600, fontSize: "13px", color: "#16a34a", margin: 0 }}>
+                      ✓ You will be notified when this item is available!
+                    </p>
+                  )}
+                </div>
+              ) : (
+                <>
+                  <button
+                    id="add-to-cart-btn"
+                    onClick={handleAddToCart}
+                    disabled={isAddingItem || isCheckoutDisabled}
+                    aria-busy={isAddingItem}
+                    className="btn-primary"
+                    style={{
+                      width: "100%", justifyContent: "center", fontSize: "16px", padding: "16px 32px",
+                      opacity: (isAddingItem || isCheckoutDisabled) ? 0.7 : 1,
+                      cursor: isCheckoutDisabled ? "not-allowed" : "pointer"
+                    }}
+                  >
+                    <CartIcon /> {isAddingItem
+                      ? "Adding to Cart..."
+                      : isCheckoutDisabled
+                      ? "Out of Stock"
+                      : isOutOfStock
+                      ? (stockPolicy === 'backorder' ? "Backorder" : "Pre-order")
+                      : "Add to Cart"}
+                  </button>
+                  <button
+                    type="button"
+                    id="buy-now-btn"
+                    onClick={handleBuyNow}
+                    disabled={isCheckoutDisabled}
+                    style={{
+                      width: "100%", display: "flex", alignItems: "center", justifyContent: "center",
+                      fontFamily: "Poppins, sans-serif", fontWeight: 600, fontSize: "16px",
+                      padding: "14px 32px", borderRadius: "var(--radius-xl)",
+                      border: `2px solid ${isCheckoutDisabled ? "var(--color-text-secondary)" : "var(--color-green-dark)"}`,
+                      color: isCheckoutDisabled ? "var(--color-text-secondary)" : "var(--color-green-dark)",
+                      background: "transparent",
+                      cursor: isCheckoutDisabled ? "not-allowed" : "pointer",
+                      transition: "all 0.25s ease",
+                      opacity: isCheckoutDisabled ? 0.6 : 1,
+                    }}
+                    onMouseEnter={(e) => {
+                      if (!isCheckoutDisabled) e.currentTarget.style.background = "var(--color-green-pale)";
+                    }}
+                    onMouseLeave={(e) => {
+                      if (!isCheckoutDisabled) e.currentTarget.style.background = "transparent";
+                    }}
+                  >
+                    {isCheckoutDisabled
+                      ? "Out of Stock"
+                      : isOutOfStock
+                      ? (stockPolicy === 'backorder' ? "Buy Now (Backorder)" : "Buy Now (Pre-order)")
+                      : "Buy Now"}
+                  </button>
+                </>
+              )}
             </div>
 
             {/* Delivery info */}

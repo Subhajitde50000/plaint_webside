@@ -209,7 +209,19 @@ export const DEFAULT_FORM_DATA: ProductFormData = {
   taxRate: 'GST 18%',
   priceNote: 'incl. of all taxes',
   variantType: 'size',
-  variants: [],
+  variants: [
+    {
+      id: 'default-1',
+      sizeName: 'Standard',
+      range: 'Standard size',
+      price: '',
+      sku: 'SKU-1',
+      stock: 0,
+      bestFor: 'Most popular pick',
+      potDiameter: 'N/A',
+      dispatch: '1–2 days',
+    }
+  ],
   baseSku: '',
   barcode: '',
   trackInventory: true,

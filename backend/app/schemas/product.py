@@ -150,6 +150,19 @@ class ProductDetailResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class CreateVariantRequest(BaseModel):
+    variant_type: str
+    option_name: str
+    option_detail: Optional[str] = None
+    price: Decimal
+    compare_at_price: Optional[Decimal] = None
+    sku: str
+    stock: Optional[int] = 0
+    best_for: Optional[str] = None
+    pot_diameter: Optional[str] = None
+    dispatch_time: Optional[str] = None
+
+
 class CreateProductRequest(BaseModel):
     category_id: int
     product_type: str
@@ -166,11 +179,13 @@ class CreateProductRequest(BaseModel):
     is_pet_friendly: Optional[bool] = None
     is_air_purifying: Optional[bool] = None
     status: str = "draft"
+    variants: Optional[List[CreateVariantRequest]] = None
 
 
 class UpdateProductRequest(BaseModel):
     title: Optional[str] = None
     slug: Optional[str] = None
+    category_id: Optional[int] = None
     short_description: Optional[str] = None
     description: Optional[str] = None
     base_price: Optional[Decimal] = None
@@ -179,3 +194,4 @@ class UpdateProductRequest(BaseModel):
     care_skill: Optional[str] = None
     is_pet_friendly: Optional[bool] = None
     is_air_purifying: Optional[bool] = None
+    variants: Optional[List[CreateVariantRequest]] = None

@@ -97,6 +97,18 @@ export const createProductApi = async (data: Record<string, any>) => {
     is_pet_friendly: Boolean(data.isPetFriendly ?? data.is_pet_friendly ?? false),
     is_air_purifying: Boolean(data.isAirPurifying ?? data.is_air_purifying ?? false),
     status: data.status ?? "draft",
+    variants: data.variants ? data.variants.map((v: any) => ({
+      variant_type: String(data.variantType || "size").toLowerCase(),
+      option_name: v.sizeName,
+      option_detail: v.range || null,
+      price: Number(v.price),
+      compare_at_price: v.compareAtPrice ? Number(v.compareAtPrice) : null,
+      sku: v.sku,
+      stock: Number(v.stock || 0),
+      best_for: v.bestFor || null,
+      pot_diameter: v.potDiameter || null,
+      dispatch_time: v.dispatch || null,
+    })) : undefined
   };
 
   const res = await adminApi.post("/admin/products/", payload);
@@ -110,6 +122,9 @@ export const updateProductApi = async (
   const payload: Record<string, any> = {};
   if (data.title !== undefined) payload.title = data.title;
   if (data.slug !== undefined) payload.slug = data.slug;
+  if (data.categoryId !== undefined || data.category_id !== undefined) {
+    payload.category_id = Number(data.categoryId ?? data.category_id);
+  }
   if (data.shortDescription !== undefined || data.short_description !== undefined) {
     payload.short_description = data.shortDescription ?? data.short_description;
   }
@@ -131,6 +146,20 @@ export const updateProductApi = async (
   }
   if (data.isAirPurifying !== undefined || data.is_air_purifying !== undefined) {
     payload.is_air_purifying = data.isAirPurifying ?? data.is_air_purifying;
+  }
+  if (data.variants !== undefined) {
+    payload.variants = data.variants.map((v: any) => ({
+      variant_type: String(data.variantType || "size").toLowerCase(),
+      option_name: v.sizeName,
+      option_detail: v.range || null,
+      price: Number(v.price),
+      compare_at_price: v.compareAtPrice ? Number(v.compareAtPrice) : null,
+      sku: v.sku,
+      stock: Number(v.stock || 0),
+      best_for: v.bestFor || null,
+      pot_diameter: v.potDiameter || null,
+      dispatch_time: v.dispatch || null,
+    }));
   }
 
   const res = await adminApi.put(`/admin/products/${productId}`, payload);

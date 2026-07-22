@@ -1,11 +1,13 @@
 import uuid as _uuid
 from fastapi import APIRouter, Depends, HTTPException, status, File, UploadFile, Query
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.exc import IntegrityError
 from typing import Optional
 
 from app.database import get_db
 from app.dependencies import require_ops_or_above, require_super_admin, get_current_admin
-from app.models.product import Product, ProductImage
+from app.models.product import Product, ProductImage, ProductVariant
+from app.models.inventory import Inventory
 from app.models.admin import AdminUser
 from app.schemas.product import CreateProductRequest, UpdateProductRequest
 from app.utils.pagination import paginate
@@ -49,13 +51,44 @@ async def create_product(
     product = Product(
         uuid=str(_uuid.uuid4()),
         created_by=admin.id,
-        **payload.model_dump(),
+        **payload.model_dump(exclude={"variants"}),
     )
     db.add(product)
-    db.commit()
+    db.flush()
+
+    if payload.variants:
+        for idx, var_data in enumerate(payload.variants):
+            variant = ProductVariant(
+                product_id=product.id,
+                variant_type=var_data.variant_type,
+                option_name=var_data.option_name,
+                option_detail=var_data.option_detail,
+                best_for=var_data.best_for,
+                pot_diameter=var_data.pot_diameter,
+                dispatch_time=var_data.dispatch_time,
+                price=var_data.price,
+                compare_at_price=var_data.compare_at_price,
+                sku=var_data.sku,
+                sort_order=idx + 1,
+            )
+            db.add(variant)
+            db.flush()
+            db.add(Inventory(variant_id=variant.id, warehouse_id=1, quantity=var_data.stock or 0))
+
+    try:
+        db.commit()
+    except IntegrityError as e:
+        db.rollback()
+        if "sku" in str(e.orig).lower() or "1062" in str(e.orig):
+            raise HTTPException(status_code=409, detail="One of the variant SKUs already exists. Please enter a unique SKU.")
+        raise HTTPException(status_code=409, detail=f"Database integrity error: {str(e.orig)}")
     db.refresh(product)
+    product_loaded = db.query(Product).options(
+        joinedload(Product.variants),
+        joinedload(Product.images)
+    ).filter(Product.id == product.id).first()
     await cache_delete_pattern("products:list:*")
-    return product
+    return product_loaded
 
 
 @router.get("/{product_id}")
@@ -64,7 +97,10 @@ async def get_product(
     db: Session = Depends(get_db),
     admin: AdminUser = Depends(get_current_admin),
 ):
-    product = db.query(Product).filter(Product.id == product_id).first()
+    product = db.query(Product).options(
+        joinedload(Product.variants),
+        joinedload(Product.images)
+    ).filter(Product.id == product_id).first()
     if not product:
         raise HTTPException(status_code=404, detail="Product not found.")
     return product
@@ -80,12 +116,68 @@ async def update_product(
     product = db.query(Product).filter(Product.id == product_id).first()
     if not product:
         raise HTTPException(status_code=404, detail="Product not found.")
-    for field, val in payload.model_dump(exclude_none=True).items():
+    for field, val in payload.model_dump(exclude_none=True, exclude={"variants"}).items():
         setattr(product, field, val)
-    db.commit()
+
+    if payload.variants is not None:
+        existing_variants = {v.sku: v for v in product.variants}
+        incoming_skus = {var_data.sku for var_data in payload.variants}
+
+        # 1. Delete variants that are not in the new list
+        for sku, v in list(existing_variants.items()):
+            if sku not in incoming_skus:
+                db.delete(v)
+
+        # 2. Add or update variants
+        for idx, var_data in enumerate(payload.variants):
+            if var_data.sku in existing_variants:
+                v = existing_variants[var_data.sku]
+                v.variant_type = var_data.variant_type
+                v.option_name = var_data.option_name
+                v.option_detail = var_data.option_detail
+                v.best_for = var_data.best_for
+                v.pot_diameter = var_data.pot_diameter
+                v.dispatch_time = var_data.dispatch_time
+                v.price = var_data.price
+                v.compare_at_price = var_data.compare_at_price
+                v.sort_order = idx + 1
+                if v.inventory:
+                    v.inventory.quantity = var_data.stock or 0
+                else:
+                    db.add(Inventory(variant_id=v.id, warehouse_id=1, quantity=var_data.stock or 0))
+            else:
+                new_v = ProductVariant(
+                    product_id=product.id,
+                    variant_type=var_data.variant_type,
+                    option_name=var_data.option_name,
+                    option_detail=var_data.option_detail,
+                    best_for=var_data.best_for,
+                    pot_diameter=var_data.pot_diameter,
+                    dispatch_time=var_data.dispatch_time,
+                    price=var_data.price,
+                    compare_at_price=var_data.compare_at_price,
+                    sku=var_data.sku,
+                    sort_order=idx + 1,
+                )
+                db.add(new_v)
+                db.flush()
+                db.add(Inventory(variant_id=new_v.id, warehouse_id=1, quantity=var_data.stock or 0))
+
+    try:
+        db.commit()
+    except IntegrityError as e:
+        db.rollback()
+        if "sku" in str(e.orig).lower() or "1062" in str(e.orig):
+            raise HTTPException(status_code=409, detail="One of the variant SKUs already exists. Please enter a unique SKU.")
+        raise HTTPException(status_code=409, detail=f"Database integrity error: {str(e.orig)}")
+    db.refresh(product)
+    product_loaded = db.query(Product).options(
+        joinedload(Product.variants),
+        joinedload(Product.images)
+    ).filter(Product.id == product.id).first()
     await cache_delete_pattern(f"products:detail:{product.slug}")
     await cache_delete_pattern("products:list:*")
-    return product
+    return product_loaded
 
 
 @router.delete("/{product_id}", status_code=status.HTTP_204_NO_CONTENT)

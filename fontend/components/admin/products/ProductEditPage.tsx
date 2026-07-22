@@ -12,7 +12,7 @@ import {
 import { uploadProductImageApi } from '@/features/admin/api/admin-products.api';
 
 // Types
-import { ProductFormData, ValidationErrors, DEFAULT_FORM_DATA, ProductStatus, ProductType } from './types';
+import { ProductFormData, ValidationErrors, DEFAULT_FORM_DATA, ProductStatus, ProductType, CATEGORIES } from './types';
 
 // Left column panels
 import { ProductInfoPanel } from './panels/ProductInfoPanel';
@@ -53,10 +53,32 @@ function validate(data: ProductFormData): ValidationErrors {
   const errors: ValidationErrors = {};
   if (!data.title.trim()) errors.title = 'Product title is required.';
   if (data.title.length > 120) errors.title = 'Title must be 120 characters or fewer.';
+  if (!data.category) errors.category = 'Category is required.';
   if (!data.currentPrice) errors.currentPrice = 'Current price is required.';
   if (data.currentPrice && parseFloat(data.currentPrice) <= 0) errors.currentPrice = 'Price must be greater than ₹0.';
   if (data.compareAtPrice && data.currentPrice && parseFloat(data.compareAtPrice) < parseFloat(data.currentPrice)) {
     errors.compareAtPrice = 'Compare-at price must be greater than the current price.';
+  }
+
+  if (data.variants && data.variants.length > 0) {
+    const variantErrors: string[] = [];
+    data.variants.forEach((v, idx) => {
+      const name = v.sizeName.trim() || `#${idx + 1}`;
+      if (!v.sizeName.trim()) {
+        variantErrors.push(`Variant #${idx + 1} size name is required.`);
+      }
+      if (!v.price) {
+        variantErrors.push(`Variant "${name}" price is required.`);
+      } else if (parseFloat(v.price) <= 0) {
+        variantErrors.push(`Variant "${name}" price must be greater than ₹0.`);
+      }
+      if (!v.sku.trim()) {
+        variantErrors.push(`Variant "${name}" SKU is required.`);
+      }
+    });
+    if (variantErrors.length > 0) {
+      errors.variants = variantErrors.join(' ');
+    }
   }
   return errors;
 }
@@ -64,7 +86,23 @@ function validate(data: ProductFormData): ValidationErrors {
 function getPublishErrors(data: ProductFormData): string[] {
   const errs: string[] = [];
   if (!data.title.trim()) errs.push('Product title is required.');
+  if (!data.category) errs.push('Category is required.');
   if (!data.currentPrice || parseFloat(data.currentPrice) <= 0) errs.push('Current price is required (must be greater than ₹0).');
+
+  if (data.variants && data.variants.length > 0) {
+    data.variants.forEach((v, idx) => {
+      const name = v.sizeName.trim() || `Variant #${idx + 1}`;
+      if (!v.sizeName.trim()) errs.push(`Variant #${idx + 1} size name is required.`);
+      if (!v.price) {
+        errs.push(`Variant "${name}" price is required.`);
+      } else if (parseFloat(v.price) <= 0) {
+        errs.push(`Variant "${name}" price must be greater than ₹0.`);
+      }
+      if (!v.sku.trim()) {
+        errs.push(`Variant "${name}" SKU is required.`);
+      }
+    });
+  }
   return errs;
 }
 
@@ -116,7 +154,14 @@ export function ProductEditPage({ mode, productId, initialData }: Props) {
   const deleteMutation = useDeleteProduct();
 
   /* Form state */
-  const [data, setData] = useState<ProductFormData>({ ...DEFAULT_FORM_DATA, ...initialData });
+  const [data, setData] = useState<ProductFormData>(() => {
+    const base = { ...DEFAULT_FORM_DATA, ...initialData };
+    if (isNew) {
+      const randSku = `SKU-${Math.random().toString(36).substring(2, 8).toUpperCase()}-1`;
+      base.variants = base.variants.map((v, i) => i === 0 ? { ...v, sku: randSku } : v);
+    }
+    return base;
+  });
   const [errors, setErrors] = useState<ValidationErrors>({});
   const [isDirty, setIsDirty] = useState(false);
   const [isSavingDraft, setIsSavingDraft] = useState(false);
@@ -140,6 +185,7 @@ export function ProductEditPage({ mode, productId, initialData }: Props) {
         ...prev,
         title: fetchedProduct.title || '',
         urlHandle: fetchedProduct.slug || '',
+        category: fetchedProduct.category_id ? CATEGORIES[fetchedProduct.category_id - 1] || '' : '',
         shortDescription: fetchedProduct.short_description || '',
         fullDescription: fetchedProduct.description || '',
         botanicalName: fetchedProduct.botanical_name || '',
@@ -162,6 +208,34 @@ export function ProductEditPage({ mode, productId, initialData }: Props) {
         })),
         seoTitle: fetchedProduct.seo_title || '',
         seoDescription: fetchedProduct.seo_description || '',
+        variantType: fetchedProduct.variants?.[0]?.variant_type 
+          ? (fetchedProduct.variants[0].variant_type === 'pack_size' ? 'pack' : fetchedProduct.variants[0].variant_type)
+          : 'size',
+        variants: (fetchedProduct.variants && fetchedProduct.variants.length > 0)
+          ? fetchedProduct.variants.map((v: any) => ({
+              id: String(v.id),
+              sizeName: v.option_name || '',
+              range: v.option_detail || '',
+              price: v.price ? String(v.price) : '',
+              sku: v.sku || '',
+              stock: v.inventory?.quantity !== undefined ? v.inventory.quantity : 0,
+              bestFor: v.best_for || '',
+              potDiameter: v.pot_diameter || '',
+              dispatch: v.dispatch_time || '1–2 days',
+            }))
+          : [
+              {
+                id: 'default-1',
+                sizeName: 'Standard',
+                range: 'Standard size',
+                price: fetchedProduct.base_price ? String(fetchedProduct.base_price) : '',
+                sku: fetchedProduct.base_sku || 'SKU-1',
+                stock: 0,
+                bestFor: 'Most popular pick',
+                potDiameter: 'N/A',
+                dispatch: '1–2 days',
+              }
+            ],
       }));
       setIsDirty(false);
     }
@@ -169,7 +243,16 @@ export function ProductEditPage({ mode, productId, initialData }: Props) {
 
   /* Field change handler */
   const onChange = useCallback((field: keyof ProductFormData, value: unknown) => {
-    setData(prev => ({ ...prev, [field]: value }));
+    setData(prev => {
+      const updated = { ...prev, [field]: value };
+      if (field === 'currentPrice' && updated.variants.length > 0) {
+        updated.variants = updated.variants.map((v, i) => i === 0 ? { ...v, price: String(value) } : v);
+      }
+      if (field === 'baseSku' && updated.variants.length > 0) {
+        updated.variants = updated.variants.map((v, i) => i === 0 ? { ...v, sku: String(value) } : v);
+      }
+      return updated;
+    });
     setIsDirty(true);
     setErrors(prev => { const e = { ...prev }; delete e[field as string]; return e; });
   }, []);
@@ -187,9 +270,13 @@ export function ProductEditPage({ mode, productId, initialData }: Props) {
 
   /* Helper to perform save/publish mutation */
   const saveProduct = async (status: ProductStatus) => {
+    const categoryIndex = CATEGORIES.indexOf(data.category);
+    const categoryId = categoryIndex >= 0 ? categoryIndex + 1 : undefined;
+
     const payload = {
       title: data.title,
       slug: data.urlHandle || (data.title ? data.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, '') : undefined),
+      categoryId,
       shortDescription: data.shortDescription,
       description: data.fullDescription,
       botanicalName: data.botanicalName,
@@ -206,6 +293,8 @@ export function ProductEditPage({ mode, productId, initialData }: Props) {
       isAirPurifying: data.airPurifying,
       seoTitle: data.seoTitle,
       seoDescription: data.seoDescription,
+      variants: data.variants,
+      variantType: data.variantType,
     };
 
     if (isNew) {
@@ -215,11 +304,11 @@ export function ProductEditPage({ mode, productId, initialData }: Props) {
     }
   };
 
-  /* Save Draft */
+  /* Save Product */
   const handleSaveDraft = async () => {
     setIsSavingDraft(true);
     try {
-      const res = await saveProduct('draft');
+      const res = await saveProduct(data.productStatus);
       setIsDirty(false);
 
       if (isNew && res) {
@@ -234,15 +323,17 @@ export function ProductEditPage({ mode, productId, initialData }: Props) {
             }
           }
         }
-        showToast('✓ Draft created successfully');
+        showToast('✓ Product created successfully');
         router.push(`/admin/products/${newId}/edit`);
       } else {
-        setData(prev => ({ ...prev, productStatus: 'draft' }));
+        if (res && res.status) {
+          setData(prev => ({ ...prev, productStatus: res.status }));
+        }
         setLastSaved('just now');
-        showToast('✓ Draft saved successfully');
+        showToast('✓ Product saved successfully');
       }
     } catch (err: any) {
-      showToast(err?.response?.data?.detail || 'Failed to save draft', 'error');
+      showToast(err?.response?.data?.detail || 'Failed to save product', 'error');
     } finally {
       setIsSavingDraft(false);
     }
@@ -300,10 +391,15 @@ export function ProductEditPage({ mode, productId, initialData }: Props) {
   const handleDuplicateConfirm = async (newTitle: string) => {
     setShowDuplicate(false);
     try {
+      const randSuffix = Math.random().toString(36).substring(2, 6).toUpperCase();
       await createMutation.mutateAsync({
         ...data,
         title: newTitle,
         status: 'draft',
+        variants: data.variants.map(v => ({
+          ...v,
+          sku: `${v.sku}-${randSuffix}`
+        }))
       });
       showToast('Duplicate created successfully. Review and publish when ready.');
     } catch (err: any) {
@@ -443,7 +539,7 @@ export function ProductEditPage({ mode, productId, initialData }: Props) {
                 background: isSavingDraft ? '#22272e' : 'transparent',
               }}
             >
-              {isSavingDraft ? 'Saving…' : 'Save Draft'}
+              {isSavingDraft ? 'Saving…' : 'Save'}
             </button>
             <button
               type="button"

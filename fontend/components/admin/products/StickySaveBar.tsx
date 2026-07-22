@@ -71,7 +71,7 @@ export function StickySaveBar({ isDirty, isSavingDraft, isPublishing, lastSaved,
       {/* Right: Save Draft + Publish */}
       <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
         <SecondaryButton onClick={onSaveDraft} loading={isSavingDraft}>
-          Save Draft
+          Save
         </SecondaryButton>
         <PrimaryButton onClick={onPublish} loading={isPublishing}>
           Publish
