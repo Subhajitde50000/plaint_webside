@@ -10,7 +10,7 @@ export type OrderStatus =
   | "return_requested"
   | "refunded";
 
-export type PaymentStatus = "pending" | "paid" | "failed" | "refunded";
+export type PaymentStatus = "pending" | "paid" | "failed" | "refunded" | "cod_pending";
 export type FulfillmentStatus = "unfulfilled" | "partial" | "fulfilled" | "returned";
 
 // ─── Order Item ─────────────────────────────────────────────────────────────
@@ -97,6 +97,7 @@ export interface CreateOrderPayload {
   giftMessage?: string;
   buyNowVariantId?: number;
   buyNowQuantity?: number;
+  paymentMethod?: string;  // "cod" | "razorpay"
 }
 
 export interface CreateOrderResponse {

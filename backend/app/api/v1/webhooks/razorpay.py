@@ -50,10 +50,39 @@ async def razorpay_webhook(
                 status="payment_confirmed",
                 description="Payment captured via Razorpay webhook",
             ))
+
+            # ── Synchronously deduct inventory ──────────────────────────────
+            from app.models.inventory import Inventory, InventoryHistory
+            for item in order.items:
+                inv = db.query(Inventory).filter(
+                    Inventory.variant_id == item.variant_id
+                ).with_for_update().first()
+                if inv:
+                    already_deducted = db.query(InventoryHistory).filter(
+                        InventoryHistory.reference_id == order.order_number,
+                        InventoryHistory.variant_id == item.variant_id,
+                        InventoryHistory.type == "sale",
+                    ).first()
+                    if not already_deducted:
+                        inv.reserved = max(0, inv.reserved - item.quantity)
+                        inv.quantity = max(0, inv.quantity - item.quantity)
+                        db.add(InventoryHistory(
+                            variant_id=item.variant_id,
+                            type="sale",
+                            quantity_change=-item.quantity,
+                            quantity_before=inv.quantity + item.quantity,
+                            quantity_after=inv.quantity,
+                            reason=f"Order {order.order_number} payment confirmed (webhook)",
+                            reference_id=order.order_number,
+                        ))
+
             db.commit()
 
             from app.tasks.order_tasks import post_payment_tasks
-            background_tasks.add_task(post_payment_tasks.delay, order.id)
+            try:
+                background_tasks.add_task(post_payment_tasks.delay, order.id)
+            except Exception:
+                pass
 
     elif event == "payment.failed":
         payment = payload["payload"]["payment"]["entity"]

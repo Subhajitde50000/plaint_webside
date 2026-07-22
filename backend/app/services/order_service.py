@@ -137,8 +137,6 @@ class OrderService:
                 image_url=primary_image,
             ))
 
-        print(f'\n \n {user.__dict__} \n \n')
-        print(f'\n \n {payload} \n \n')
         # 8. Reserve inventory
         for item in order_items_data:
             variant = item["variant"]

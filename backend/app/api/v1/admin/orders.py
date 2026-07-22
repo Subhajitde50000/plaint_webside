@@ -16,6 +16,7 @@ from app.schemas.order import (
 )
 from app.utils.pagination import paginate
 from app.services.payment_service import PaymentService
+from app.models.inventory import Inventory, InventoryHistory
 from app.tasks.order_tasks import (
     release_inventory_on_cancel, send_fulfillment_notification
 )
@@ -164,8 +165,46 @@ async def admin_cancel_order(
         note=f"Order Cancelled. Reason: {payload.reason}",
         is_internal=True,
     ))
+
+    # ── Synchronously restore inventory ─────────────────────────────────────
+    for item in order.items:
+        sale_history = db.query(InventoryHistory).filter(
+            InventoryHistory.reference_id == order.order_number,
+            InventoryHistory.variant_id == item.variant_id,
+            InventoryHistory.type == "sale",
+        ).first()
+        restock_history = db.query(InventoryHistory).filter(
+            InventoryHistory.reference_id == order.order_number,
+            InventoryHistory.variant_id == item.variant_id,
+            InventoryHistory.type == "adjustment",
+            InventoryHistory.reason.like("%cancelled (restocked)%"),
+        ).first()
+        inv = db.query(Inventory).filter(
+            Inventory.variant_id == item.variant_id
+        ).with_for_update().first()
+        if inv:
+            if sale_history and not restock_history:
+                # Payment confirmed → quantity was deducted → restore it
+                inv.quantity += item.quantity
+                db.add(InventoryHistory(
+                    variant_id=item.variant_id,
+                    type="adjustment",
+                    quantity_change=item.quantity,
+                    quantity_before=inv.quantity - item.quantity,
+                    quantity_after=inv.quantity,
+                    reason=f"Order {order.order_number} cancelled (restocked)",
+                    reference_id=order.order_number,
+                ))
+            elif not sale_history:
+                # Payment not confirmed → only reservation was held → release it
+                inv.reserved = max(0, inv.reserved - item.quantity)
+
     db.commit()
-    release_inventory_on_cancel.delay(order.id)
+    # Also try Celery in case it's available (no-op if already handled above)
+    try:
+        release_inventory_on_cancel.delay(order.id)
+    except Exception:
+        pass
     return {"message": "Order cancelled."}
 
 

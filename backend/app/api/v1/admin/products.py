@@ -84,7 +84,7 @@ async def create_product(
         raise HTTPException(status_code=409, detail=f"Database integrity error: {str(e.orig)}")
     db.refresh(product)
     product_loaded = db.query(Product).options(
-        joinedload(Product.variants),
+        joinedload(Product.variants).joinedload(ProductVariant.inventory),
         joinedload(Product.images)
     ).filter(Product.id == product.id).first()
     await cache_delete_pattern("products:list:*")
@@ -98,7 +98,7 @@ async def get_product(
     admin: AdminUser = Depends(get_current_admin),
 ):
     product = db.query(Product).options(
-        joinedload(Product.variants),
+        joinedload(Product.variants).joinedload(ProductVariant.inventory),
         joinedload(Product.images)
     ).filter(Product.id == product_id).first()
     if not product:
@@ -113,7 +113,9 @@ async def update_product(
     db: Session = Depends(get_db),
     admin: AdminUser = Depends(require_ops_or_above),
 ):
-    product = db.query(Product).filter(Product.id == product_id).first()
+    product = db.query(Product).options(
+        joinedload(Product.variants).joinedload(ProductVariant.inventory)
+    ).filter(Product.id == product_id).first()
     if not product:
         raise HTTPException(status_code=404, detail="Product not found.")
     for field, val in payload.model_dump(exclude_none=True, exclude={"variants"}).items():
@@ -172,7 +174,7 @@ async def update_product(
         raise HTTPException(status_code=409, detail=f"Database integrity error: {str(e.orig)}")
     db.refresh(product)
     product_loaded = db.query(Product).options(
-        joinedload(Product.variants),
+        joinedload(Product.variants).joinedload(ProductVariant.inventory),
         joinedload(Product.images)
     ).filter(Product.id == product.id).first()
     await cache_delete_pattern(f"products:detail:{product.slug}")

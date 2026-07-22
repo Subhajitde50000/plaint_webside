@@ -109,7 +109,9 @@ function OrderCard({ order }: { order: OrderListItem }) {
           <div style={{ fontWeight: 800, fontSize: 18, color: T.heading, letterSpacing: "-0.02em" }}>
             {formatPrice(order.total)}
           </div>
-          <div style={{ fontSize: 12, color: T.muted, marginTop: 2 }}>Total paid</div>
+          <div style={{ fontSize: 12, color: T.muted, marginTop: 2 }}>
+            {(order as any).payment_status === "cod_pending" ? "💵 COD · Pay on delivery" : "Total paid"}
+          </div>
         </div>
 
         {/* Arrow */}

@@ -111,9 +111,10 @@ export default function OrderSuccessPage() {
   const orderItems = Array.isArray(order?.items) ? order.items : [];
 
   useEffect(() => {
-    // Trigger entrance animation
     setTimeout(() => setMounted(true), 50);
   }, []);
+
+  const isCod = (order as any)?.payment_gateway === "cod";
 
   return (
     <div style={{ minHeight: "100vh", background: T.bg, fontFamily: "'Outfit', 'Inter', sans-serif" }}>
@@ -155,7 +156,6 @@ export default function OrderSuccessPage() {
         }}>
           {/* Icon */}
           <div style={{ position: "relative", display: "inline-block", marginBottom: 24 }}>
-            {/* Pulse rings */}
             <div style={{
               position: "absolute", inset: -8, borderRadius: "50%",
               border: `2px solid ${T.green}`,
@@ -188,7 +188,9 @@ export default function OrderSuccessPage() {
             fontSize: 15, color: T.muted, margin: "0 0 28px",
             lineHeight: 1.6, animation: "fadeUp 0.5s 0.3s ease both",
           }}>
-            Thank you for your purchase. Your green companions are being prepared with love.
+            {isCod
+              ? "Your order is placed! Pay in cash or UPI when your delivery arrives."
+              : "Thank you for your purchase. Your green companions are being prepared with love."}
           </p>
 
           {/* Order number */}
@@ -245,7 +247,7 @@ export default function OrderSuccessPage() {
                 paddingTop: 12, borderTop: `1px solid ${T.border}`,
                 fontSize: 15, fontWeight: 800, color: T.heading,
               }}>
-                <span>Total paid</span>
+                <span>{isCod ? "💵 Pay on delivery (COD)" : "Total paid"}</span>
                 <span style={{ color: T.green }}>{formatPrice(order.total)}</span>
               </div>
 
@@ -261,6 +263,17 @@ export default function OrderSuccessPage() {
                       day: "2-digit", month: "short", year: "numeric",
                     })}
                   </span>
+                </div>
+              )}
+
+              {/* COD reminder */}
+              {isCod && (
+                <div style={{
+                  marginTop: 12, paddingTop: 12, borderTop: `1px solid ${T.border}`,
+                  fontSize: 12, color: T.greenMid, fontWeight: 600,
+                  background: T.greenPale, borderRadius: 8, padding: "10px 12px",
+                }}>
+                  💡 Keep exact change of {formatPrice(order.total)} ready for the delivery agent.
                 </div>
               )}
             </div>
@@ -320,7 +333,9 @@ export default function OrderSuccessPage() {
           textAlign: "center", fontSize: 13, color: T.muted, marginTop: 24,
           animation: "fadeUp 0.5s 0.8s ease both", lineHeight: 1.5,
         }}>
-          A confirmation email has been sent. You can track your order anytime from{" "}
+          {isCod
+            ? "You can track your order anytime from "
+            : "A confirmation email has been sent. You can track your order anytime from "}
           <Link href="/orders" style={{ color: T.green, textDecoration: "none", fontWeight: 600 }}>
             My Orders
           </Link>.

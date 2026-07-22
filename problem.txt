@@ -10,3 +10,12 @@
 9.  onluy pdp can crad not onather
 
 10. emal mot send
+----------------order-------------
+11. user have no contolr after order 
+12. on order section not see the item properly
+13. on admin side not resive the full item detels
+
+
+-------------------product-----------
+14.product stock related problem
+product can be deleted

@@ -118,6 +118,7 @@ class CreateOrderRequest(BaseModel):
     notes: Optional[str] = None
     buy_now_variant_id: Optional[int] = None
     buy_now_quantity: Optional[int] = None
+    payment_method: Optional[str] = "razorpay"  # "cod", "razorpay", etc.
 
 
 class VerifyPaymentRequest(BaseModel):

@@ -26,15 +26,35 @@ async def create_order(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    print(payload)
     try:
         svc = OrderService(db)
         order = svc.create_order(user, payload)
-        print('..................1.............')
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
+    is_cod = (payload.payment_method or "razorpay").lower() == "cod"
+
+    if is_cod:
+        # COD: mark as cod_pending, keep stock as reserved (not deducted yet)
+        order.payment_status = "cod_pending"
+        order.payment_gateway = "cod"
+        db.add(OrderStatusHistory(
+            order_id=order.id,
+            status="order_placed",
+            description="Order placed with Cash on Delivery",
+        ))
+        db.commit()
+        return {
+            "order_uuid": order.uuid,
+            "order_number": order.order_number,
+            "total": str(order.total),
+            "razorpay_order_id": None,
+            "razorpay_key_id": None,
+        }
+
+    # Online payment — attempt Razorpay
     payment_svc = PaymentService()
+    dev_mode = False
     try:
         rp_order = payment_svc.create_razorpay_order(
             amount_paise=int(float(order.total) * 100),
@@ -44,9 +64,36 @@ async def create_order(
         order.payment_gateway = "razorpay"
         db.commit()
     except Exception:
-        # Return order without payment if Razorpay not configured (dev mode)
+        # Razorpay not configured — dev mode: auto-confirm payment & deduct stock now
+        dev_mode = True
         rp_order = {"id": None, "key": None}
-    print('..................1.............')
+
+    if dev_mode:
+        from app.models.inventory import Inventory, InventoryHistory
+        order.payment_status = "paid"
+        order.status = "payment_confirmed"
+        db.add(OrderStatusHistory(
+            order_id=order.id,
+            status="payment_confirmed",
+            description="Auto-confirmed (dev mode – no payment gateway)",
+        ))
+        for item in order.items:
+            inv = db.query(Inventory).filter(
+                Inventory.variant_id == item.variant_id
+            ).with_for_update().first()
+            if inv:
+                inv.reserved = max(0, inv.reserved - item.quantity)
+                inv.quantity = max(0, inv.quantity - item.quantity)
+                db.add(InventoryHistory(
+                    variant_id=item.variant_id,
+                    type="sale",
+                    quantity_change=-item.quantity,
+                    quantity_before=inv.quantity + item.quantity,
+                    quantity_after=inv.quantity,
+                    reason=f"Order {order.order_number} auto-confirmed (dev mode)",
+                    reference_id=order.order_number,
+                ))
+        db.commit()
 
     return {
         "order_uuid": order.uuid,
@@ -87,10 +134,41 @@ async def verify_payment(
         status="payment_confirmed",
         description="Payment verified by customer",
     ))
+
+    # ── Synchronously deduct inventory (does not depend on Celery/Redis) ──
+    from app.models.inventory import Inventory, InventoryHistory
+    for item in order.items:
+        inv = db.query(Inventory).filter(
+            Inventory.variant_id == item.variant_id
+        ).with_for_update().first()
+        if inv:
+            # Guard against double deduction (e.g. webhook fires after this)
+            already_deducted = db.query(InventoryHistory).filter(
+                InventoryHistory.reference_id == order.order_number,
+                InventoryHistory.variant_id == item.variant_id,
+                InventoryHistory.type == "sale",
+            ).first()
+            if not already_deducted:
+                inv.reserved = max(0, inv.reserved - item.quantity)
+                inv.quantity = max(0, inv.quantity - item.quantity)
+                db.add(InventoryHistory(
+                    variant_id=item.variant_id,
+                    type="sale",
+                    quantity_change=-item.quantity,
+                    quantity_before=inv.quantity + item.quantity,
+                    quantity_after=inv.quantity,
+                    reason=f"Order {order.order_number} payment confirmed",
+                    reference_id=order.order_number,
+                ))
+
     db.commit()
 
-    # Trigger background tasks
-    post_payment_tasks.delay(order.id)
+    # ── Dispatch Celery task for loyalty points & confirmation email ──
+    # The task will skip inventory since it's already been deducted above.
+    try:
+        post_payment_tasks.delay(order.id)
+    except Exception:
+        pass  # Celery/Redis not running; inventory already handled above.
 
     return {"message": "Payment confirmed.", "order_number": order.order_number}
 
@@ -174,8 +252,49 @@ async def cancel_order(
         status="cancelled",
         description=f"Cancelled by customer: {payload.reason}",
     ))
+
+    # ── Synchronously restore inventory ─────────────────────────────────────
+    from app.models.inventory import Inventory, InventoryHistory
+    for item in order.items:
+        # Check if stock was physically deducted (i.e. payment was confirmed)
+        sale_history = db.query(InventoryHistory).filter(
+            InventoryHistory.reference_id == order.order_number,
+            InventoryHistory.variant_id == item.variant_id,
+            InventoryHistory.type == "sale",
+        ).first()
+        # Guard against double-restocking
+        restock_history = db.query(InventoryHistory).filter(
+            InventoryHistory.reference_id == order.order_number,
+            InventoryHistory.variant_id == item.variant_id,
+            InventoryHistory.type == "adjustment",
+            InventoryHistory.reason.like("%cancelled (restocked)%"),
+        ).first()
+        inv = db.query(Inventory).filter(
+            Inventory.variant_id == item.variant_id
+        ).with_for_update().first()
+        if inv:
+            if sale_history and not restock_history:
+                # Payment confirmed → quantity was deducted → restore it
+                inv.quantity += item.quantity
+                db.add(InventoryHistory(
+                    variant_id=item.variant_id,
+                    type="adjustment",
+                    quantity_change=item.quantity,
+                    quantity_before=inv.quantity - item.quantity,
+                    quantity_after=inv.quantity,
+                    reason=f"Order {order.order_number} cancelled (restocked)",
+                    reference_id=order.order_number,
+                ))
+            elif not sale_history:
+                # Payment not confirmed → only reservation was held → release it
+                inv.reserved = max(0, inv.reserved - item.quantity)
+
     db.commit()
-    release_inventory_on_cancel.delay(order.id)
+    # Also try Celery in case it's available (no-op if already handled above)
+    try:
+        release_inventory_on_cancel.delay(order.id)
+    except Exception:
+        pass
     return {"message": "Order cancelled successfully."}
 
 
