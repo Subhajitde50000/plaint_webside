@@ -716,6 +716,8 @@ function getStatusStyle(status: string) {
     case "delivered": return { cls: "order-status-delivered", icon: "✓", label: "Delivered" };
     case "processing": return { cls: "order-status-processing", icon: "⏳", label: "Processing" };
     case "shipped": return { cls: "order-status-shipped", icon: "🚚", label: "Shipped" };
+    case "refund_pending": return { cls: "order-status-processing", icon: "💰", label: "Refund Processing" };
+    case "refunded": return { cls: "order-status-delivered", icon: "✓", label: "Refunded" };
     case "cancelled": return { cls: "order-status-cancelled", icon: "✕", label: "Cancelled" };
     case "returned": return { cls: "order-status-returned", icon: "↩", label: "Returned" };
     default: return { cls: "", icon: "", label: status };
@@ -930,8 +932,10 @@ function OverviewSection({
    SECTION: MY ORDERS
 ───────────────────────────────────────────── */
 function normalizeOrderStatus(status: string): string {
-  if (status === "cancelled") return "cancelled";
-  if (status === "return_received" || status === "refunded") return "returned";
+  if (["cancelled", "cancelled_by_customer", "cancelled_by_admin"].includes(status)) return "cancelled";
+  if (status === "refund_pending") return "refund_pending";
+  if (status === "refunded") return "refunded";
+  if (status === "return_received") return "returned";
   if (status === "dispatched" || status === "in_transit" || status === "out_for_delivery") return "shipped";
   if (status === "delivered") return "delivered";
   return "processing"; // order_placed, payment_confirmed, processing, packed
@@ -1121,7 +1125,12 @@ function OrdersSection({ onToast }: { onToast: (msg: string, t?: ToastType["type
                 {order.status === "delivered" && <button className="btn-profile-outline" style={{ height: 38, fontSize: 13 }} onClick={() => onToast("Review submitted! Thank you.", "success")}>Write a Review</button>}
                 <button className="btn-profile-outline" style={{ height: 38, fontSize: 13 }} onClick={() => onToast("Items added to cart!", "success")}>Buy Again</button>
                 {order.status === "delivered" && <button style={{ background: "none", border: "none", color: "var(--profile-danger-text)", fontSize: 13, cursor: "pointer", fontFamily: "Outfit", fontWeight: 500, padding: "0 8px" }} onClick={() => handleReturnOrder(order.uuid)}>Return / Exchange</button>}
-                {order.status === "processing" && <button style={{ background: "none", border: "none", color: "var(--profile-danger-text)", fontSize: 13, cursor: "pointer", fontFamily: "Outfit", fontWeight: 500, padding: "0 8px" }} onClick={() => handleCancelOrder(order.uuid)}>Cancel Order</button>}
+                {[
+                  "new_order", "payment_pending", "payment_verified", "payment_confirmed", "cod_eligibility_verified",
+                  "order_accepted", "order_confirmed", "inventory_reserved", "picking",
+                  "quality_check", "processing", "packed", "ready_for_dispatch",
+                  "courier_assigned", "picked_up",
+                ].includes(order.status) && <button style={{ background: "none", border: "none", color: "var(--profile-danger-text)", fontSize: 13, cursor: "pointer", fontFamily: "Outfit", fontWeight: 500, padding: "0 8px" }} onClick={() => handleCancelOrder(order.uuid)}>Cancel Order</button>}
               </div>
             </div>
           );

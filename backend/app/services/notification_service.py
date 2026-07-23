@@ -130,6 +130,18 @@ class NotificationService:
             },
         )
 
+    async def order_cancelled(self, user, order):
+        await self.send_email(
+            to_email=user.email,
+            template_id="order_cancelled",
+            props={
+                "first_name": user.first_name,
+                "order_number": order.order_number,
+                "reason": order.cancel_reason or "Not specified",
+                "refund_status": order.status,
+            },
+        )
+
     async def send_review_request(self, user, order):
         await self.send_email(
             to_email=user.email,

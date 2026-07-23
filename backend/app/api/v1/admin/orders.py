@@ -18,9 +18,7 @@ from app.schemas.order import (
 from app.utils.pagination import paginate
 from app.services.payment_service import PaymentService
 from app.models.inventory import Inventory, InventoryHistory
-from app.tasks.order_tasks import (
-    release_inventory_on_cancel, send_fulfillment_notification
-)
+from app.tasks.order_tasks import send_fulfillment_notification, send_cancellation_notification
 
 router = APIRouter(prefix="/admin/orders", tags=["Admin - Orders"])
 
@@ -66,27 +64,33 @@ async def update_order_status(
         raise HTTPException(status_code=400, detail="COD eligibility can only be verified for a pending COD order.")
     if payload.status in {"order_accepted", "order_confirmed"} and is_cod and order.status != "cod_eligibility_verified":
         raise HTTPException(status_code=400, detail="Verify COD eligibility before accepting a COD order.")
-    if payload.status == "cod_amount_collected":
-        if not is_cod or order.status != "out_for_delivery":
-            raise HTTPException(status_code=400, detail="COD amount can only be collected for a COD order that is out for delivery.")
+    if payload.status == "order_accepted":
         for item in order.items:
             inv = db.query(Inventory).filter(Inventory.variant_id == item.variant_id).with_for_update().first()
-            if not inv:
-                continue
-            already_deducted = db.query(InventoryHistory).filter(
+            if not inv or inv.quantity - inv.reserved < item.quantity:
+                raise HTTPException(status_code=400, detail=f"Insufficient stock to accept order item '{item.title}'.")
+            already_committed = db.query(InventoryHistory).filter(
                 InventoryHistory.reference_id == order.order_number,
                 InventoryHistory.variant_id == item.variant_id,
                 InventoryHistory.type == "sale",
             ).first()
-            if not already_deducted:
-                inv.reserved = max(0, inv.reserved - item.quantity)
-                inv.quantity = max(0, inv.quantity - item.quantity)
+            if not already_committed:
+                quantity_before = inv.quantity
+                # Release a reservation left by orders created before this
+                # acceptance-only inventory policy, then commit stock once.
+                if inv.reserved >= item.quantity:
+                    inv.reserved -= item.quantity
+                inv.quantity -= item.quantity
                 db.add(InventoryHistory(
-                    variant_id=item.variant_id, type="sale", quantity_change=-item.quantity,
-                    quantity_before=inv.quantity + item.quantity, quantity_after=inv.quantity,
-                    reason=f"Order {order.order_number} COD amount collected",
+                    variant_id=item.variant_id, admin_id=admin.id, type="sale",
+                    quantity_change=-item.quantity, quantity_before=quantity_before,
+                    quantity_after=inv.quantity,
+                    reason=f"Order {order.order_number} accepted; inventory reserved",
                     reference_id=order.order_number,
                 ))
+    if payload.status == "cod_amount_collected":
+        if not is_cod or order.status != "out_for_delivery":
+            raise HTTPException(status_code=400, detail="COD amount can only be collected for a COD order that is out for delivery.")
         order.payment_status = "paid"
     if payload.status == "delivered" and is_cod and order.status != "cod_amount_collected":
         raise HTTPException(status_code=400, detail="Record COD amount collection before marking this order as delivered.")
@@ -235,7 +239,7 @@ async def admin_cancel_order(
     order = db.query(Order).filter(Order.uuid == order_uuid).first()
     if not order:
         raise HTTPException(status_code=404, detail="Order not found.")
-    if order.status in ("delivered", "completed", "cancelled_by_customer", "cancelled_by_admin"):
+    if order.status in ("shipped", "dispatched", "in_transit", "out_for_delivery", "delivered", "completed", "cancelled_by_customer", "cancelled_by_admin", "refund_pending", "refunded", "return_requested", "return_approved", "return_pickup_scheduled", "return_received", "return_inspection", "return_rejected", "return_completed"):
         raise HTTPException(status_code=400, detail=f"Cannot cancel order in '{order.status}' state.")
 
     order.status = "cancelled_by_admin"
@@ -288,10 +292,33 @@ async def admin_cancel_order(
                 # Payment not confirmed → only reservation was held → release it
                 inv.reserved = max(0, inv.reserved - item.quantity)
 
+    if order.payment_gateway != "cod" and order.payment_status in {"paid", "partially_paid"}:
+        gateway_refund_id = None
+        if order.razorpay_payment_id:
+            try:
+                gateway_refund_id = PaymentService().create_refund(
+                    payment_id=order.razorpay_payment_id,
+                    amount_paise=int(float(order.total) * 100),
+                    notes={"order_number": order.order_number, "reason": payload.reason or "Admin cancellation"},
+                ).get("id")
+            except Exception:
+                gateway_refund_id = None
+        order.status = "refunded" if gateway_refund_id else "refund_pending"
+        if gateway_refund_id:
+            order.payment_status = "refunded"
+        db.add(Refund(
+            order_id=order.id, admin_id=admin.id, amount=order.total, reason=payload.reason,
+            type="full", gateway_refund_id=gateway_refund_id,
+            status="processed" if gateway_refund_id else "pending",
+        ))
+        db.add(OrderStatusHistory(
+            order_id=order.id, status=order.status, admin_id=admin.id,
+            description="Refund completed" if gateway_refund_id else "Refund processing after admin cancellation",
+        ))
+
     db.commit()
-    # Also try Celery in case it's available (no-op if already handled above)
     try:
-        release_inventory_on_cancel.delay(order.id)
+        send_cancellation_notification.delay(order.id)
     except Exception:
         pass
     return {"message": "Order cancelled."}

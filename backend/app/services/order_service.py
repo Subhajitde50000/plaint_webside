@@ -157,7 +157,8 @@ class OrderService:
                 image_url=primary_image,
             ))
 
-        # 8. Reserve inventory
+        # 8. Validate inventory only. Stock is committed when an admin accepts
+        # the order, not while a customer is still paying/reviewing it.
         for item in order_items_data:
             variant = item["variant"]
             inventory = db.query(Inventory).filter(
@@ -175,7 +176,6 @@ class OrderService:
                     f"Insufficient stock for '{variant.product.title}'. "
                     f"Only {available} available."
                 )
-            inventory.reserved += item["quantity"]
 
         # 9. Initial status history
         db.add(OrderStatusHistory(

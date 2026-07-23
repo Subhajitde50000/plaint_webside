@@ -216,7 +216,7 @@ const GLOBAL_CSS = `
 ════════════════════════════════════════════ */
 type PaymentStatus = "Paid" | "Pending" | "Failed" | "COD Pending" | "Refunded";
 type FulfilmentStatus =
-  | "Unfulfilled" | "Shipped" | "Out for Delivery"
+  | "Unfulfilled" | "Partially fulfilled" | "Shipped" | "Out for Delivery"
   | "Delivered" | "Cancelled" | "Return Requested" | "Return Received";
 
 interface Order {
@@ -240,16 +240,18 @@ function mapPaymentStatus(status: string): PaymentStatus {
 }
 
 function mapFulfilmentStatus(status: string, orderStatus?: string): FulfilmentStatus {
-  if (orderStatus === "cancelled") return "Cancelled";
-  if (orderStatus === "return_requested") return "Return Requested";
-  if (orderStatus === "return_received") return "Return Received";
-  if (orderStatus === "out_for_delivery") return "Out for Delivery";
-  if (orderStatus === "dispatched" || orderStatus === "in_transit") return "Shipped";
-  if (orderStatus === "delivered") return "Delivered";
+  const normalizedOrderStatus = (orderStatus || "").toLowerCase();
+
+  if (["cancelled", "cancelled_by_customer", "cancelled_by_admin"].includes(normalizedOrderStatus)) return "Cancelled";
+  if (["return_requested", "return_approved", "return_pickup_scheduled"].includes(normalizedOrderStatus)) return "Return Requested";
+  if (["return_received", "return_inspection", "return_completed", "return_rejected"].includes(normalizedOrderStatus)) return "Return Received";
+  if (normalizedOrderStatus === "out_for_delivery") return "Out for Delivery";
+  if (["dispatched", "in_transit", "picked_up", "shipped"].includes(normalizedOrderStatus)) return "Shipped";
+  if (["delivered", "completed"].includes(normalizedOrderStatus)) return "Delivered";
 
   switch (status) {
     case "unfulfilled": return "Unfulfilled";
-    case "partially_fulfilled": return "Unfulfilled";
+    case "partially_fulfilled": return "Partially fulfilled";
     case "fulfilled": return "Delivered";
     case "returned": return "Return Received";
     default: return "Unfulfilled";
@@ -291,6 +293,7 @@ const PAYMENT_STYLE: Record<PaymentStatus, { bg:string; color:string }> = {
 };
 const FULFILMENT_STYLE: Record<FulfilmentStatus, { bg:string; color:string }> = {
   "Unfulfilled":      { bg: T.processingBg, color: T.processing },
+  "Partially fulfilled": { bg: T.attemptedBg, color: T.attempted },
   "Shipped":          { bg: T.shippedBg,    color: T.shipped    },
   "Out for Delivery": { bg: T.shippedBg,    color: T.shipped    },
   "Delivered":        { bg: T.deliveredBg,  color: T.delivered  },
@@ -340,7 +343,7 @@ function recommendedWorkflowStatuses(currentStatus: string, paymentStatus: strin
     processing: ["packed"],
     packed: ["ready_for_dispatch"],
     ready_for_dispatch: ["courier_assigned"],
-    courier_assigned: ["picked_up", "cancelled_by_admin"],
+    courier_assigned: ["picked_up"],
     picked_up: ["shipped"],
     dispatched: ["in_transit"],
     shipped: ["in_transit"],
@@ -1402,10 +1405,15 @@ function OrderDetailPanel({
           <div style={{ background:T.cardBg, border:`1px solid ${T.border}`, borderRadius:"8px", padding:"20px", width:"360px", display:"flex", flexDirection:"column", gap:"12px" }}>
             <div style={{ fontSize:"16px", fontWeight:700, color:T.text }}>Cancel Order</div>
             <p style={{ fontSize:"12px", color:T.textMuted, margin:0 }}>Please provide a reason for cancelling this order.</p>
+            <select value={cancelReason} onChange={e => setCancelReason(e.target.value)}
+              style={{ width:"100%", padding:"9px 12px", background:T.inputBg, border:`1px solid ${T.border}`, borderRadius:"6px", color:T.text, fontSize:"12px", outline:"none" }}>
+              <option value="">Select cancellation reason…</option>
+              {['Out of Stock', 'Damaged Product', 'Fraud', 'Delivery Unavailable', 'Other'].map(reason => <option key={reason} value={reason}>{reason}</option>)}
+            </select>
             <textarea
               value={cancelReason}
               onChange={e => setCancelReason(e.target.value)}
-              placeholder="e.g. Customer changed mind, Out of stock..."
+              placeholder="Add details or enter another reason…"
               rows={3}
               style={{ width:"100%", padding:"9px 12px", background:T.inputBg, border:`1px solid ${T.border}`, borderRadius:"6px", color:T.text, fontSize:"12px", outline:"none", resize:"none" }}
             />

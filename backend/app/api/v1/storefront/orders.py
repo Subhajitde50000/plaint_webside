@@ -4,14 +4,14 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.dependencies import get_current_user
-from app.models.order import Order, OrderStatusHistory, Return
+from app.models.order import Order, OrderStatusHistory, Return, Refund
 from app.models.user import User
 from app.schemas.order import (
     CreateOrderRequest, VerifyPaymentRequest, CancelOrderRequest, ReturnRequest
 )
 from app.services.order_service import OrderService
 from app.services.payment_service import PaymentService
-from app.tasks.order_tasks import post_payment_tasks, release_inventory_on_cancel
+from app.tasks.order_tasks import post_payment_tasks, send_cancellation_notification
 from app.utils.pagination import paginate
 from datetime import datetime, timezone
 
@@ -76,7 +76,6 @@ async def create_order(
         rp_order = {"id": None, "key": None}
 
     if dev_mode:
-        from app.models.inventory import Inventory, InventoryHistory
         order.payment_status = "paid"
         order.status = "payment_verified"
         db.add(OrderStatusHistory(
@@ -84,22 +83,6 @@ async def create_order(
             status="payment_verified",
             description="Auto-confirmed (dev mode – no payment gateway)",
         ))
-        for item in order.items:
-            inv = db.query(Inventory).filter(
-                Inventory.variant_id == item.variant_id
-            ).with_for_update().first()
-            if inv:
-                inv.reserved = max(0, inv.reserved - item.quantity)
-                inv.quantity = max(0, inv.quantity - item.quantity)
-                db.add(InventoryHistory(
-                    variant_id=item.variant_id,
-                    type="sale",
-                    quantity_change=-item.quantity,
-                    quantity_before=inv.quantity + item.quantity,
-                    quantity_after=inv.quantity,
-                    reason=f"Order {order.order_number} auto-confirmed (dev mode)",
-                    reference_id=order.order_number,
-                ))
         db.commit()
 
     return {
@@ -144,7 +127,8 @@ async def verify_payment(
 
     # ── Synchronously deduct inventory (does not depend on Celery/Redis) ──
     from app.models.inventory import Inventory, InventoryHistory
-    for item in order.items:
+    # Stock is committed at ORDER_ACCEPTED by admin, not payment verification.
+    for item in ():
         inv = db.query(Inventory).filter(
             Inventory.variant_id == item.variant_id
         ).with_for_update().first()
@@ -247,8 +231,19 @@ async def cancel_order(
     ).first()
     if not order:
         raise HTTPException(status_code=404, detail="Order not found.")
-    if order.status not in ("new_order", "payment_pending", "order_placed", "payment_verified", "payment_confirmed", "order_accepted", "order_confirmed"):
-        raise HTTPException(status_code=400, detail="Order cannot be cancelled at this stage.")
+    non_cancellable = {
+        "shipped", "dispatched", "in_transit", "out_for_delivery", "delivered", "completed",
+        "cancelled", "cancelled_by_customer", "cancelled_by_admin", "refund_pending", "refunded",
+        "return_requested", "return_approved", "return_pickup_scheduled", "return_received",
+        "return_inspection", "return_rejected", "return_completed",
+    }
+    if order.status in non_cancellable:
+        raise HTTPException(status_code=400, detail="Shipped, delivered, or returned orders cannot be cancelled.")
+    created_at = order.created_at
+    if created_at and created_at.tzinfo is None:
+        created_at = created_at.replace(tzinfo=timezone.utc)
+    if created_at and (datetime.now(timezone.utc) - created_at).total_seconds() > 24 * 60 * 60:
+        raise HTTPException(status_code=400, detail="The 24-hour cancellation window has closed.")
 
     order.status = "cancelled_by_customer"
     order.cancelled_at = datetime.now(timezone.utc)
@@ -296,10 +291,32 @@ async def cancel_order(
                 # Payment not confirmed → only reservation was held → release it
                 inv.reserved = max(0, inv.reserved - item.quantity)
 
+    if order.payment_gateway != "cod" and order.payment_status in {"paid", "partially_paid"}:
+        gateway_refund_id = None
+        if order.razorpay_payment_id:
+            try:
+                gateway_refund_id = PaymentService().create_refund(
+                    payment_id=order.razorpay_payment_id,
+                    amount_paise=int(float(order.total) * 100),
+                    notes={"order_number": order.order_number, "reason": payload.reason or "Customer cancellation"},
+                ).get("id")
+            except Exception:
+                gateway_refund_id = None
+        order.status = "refunded" if gateway_refund_id else "refund_pending"
+        if gateway_refund_id:
+            order.payment_status = "refunded"
+        db.add(Refund(
+            order_id=order.id, amount=order.total, reason=payload.reason, type="full",
+            gateway_refund_id=gateway_refund_id, status="processed" if gateway_refund_id else "pending",
+        ))
+        db.add(OrderStatusHistory(
+            order_id=order.id, status=order.status,
+            description="Refund completed" if gateway_refund_id else "Refund processing after customer cancellation",
+        ))
+
     db.commit()
-    # Also try Celery in case it's available (no-op if already handled above)
     try:
-        release_inventory_on_cancel.delay(order.id)
+        send_cancellation_notification.delay(order.id)
     except Exception:
         pass
     return {"message": "Order cancelled successfully."}

@@ -133,7 +133,12 @@ export interface ReturnOrderPayload {
 }
 
 // ─── Utility: cancellable and returnable statuses ────────────────────────────
-export const CANCELLABLE_STATUSES: OrderStatus[] = ["new_order", "payment_pending", "order_placed", "payment_confirmed", "order_confirmed"];
+export const CANCELLABLE_STATUSES: OrderStatus[] = [
+  "new_order", "payment_pending", "payment_verified", "payment_confirmed", "cod_eligibility_verified",
+  "order_placed", "order_accepted", "order_confirmed", "inventory_reserved",
+  "picking", "quality_check", "processing", "packed", "ready_for_dispatch",
+  "courier_assigned", "picked_up",
+];
 export const RETURNABLE_STATUSES: OrderStatus[] = ["delivered"];
 export const TRANSIT_STATUSES: OrderStatus[] = ["shipped", "out_for_delivery"];
 

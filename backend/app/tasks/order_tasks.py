@@ -17,7 +17,8 @@ def post_payment_tasks(self, order_id: int):
             return
 
         # 1. Deduct reserved inventory → actual stock (if not already done synchronously)
-        for item in order.items:
+        # Stock is committed only when admin accepts the order.
+        for item in ():
             inv = db.query(Inventory).filter(
                 Inventory.variant_id == item.variant_id
             ).with_for_update().first()
@@ -151,5 +152,17 @@ def send_fulfillment_notification(order_id: int):
         if order and order.user_id and order.user:
             notif = NotificationService()
             asyncio.run(notif.order_shipped(order.user, order))
+    finally:
+        db.close()
+
+
+@celery_app.task
+def send_cancellation_notification(order_id: int):
+    """Notify the customer of cancellation and any pending/completed refund."""
+    db = SessionLocal()
+    try:
+        order = db.query(Order).filter(Order.id == order_id).first()
+        if order and order.user_id and order.user:
+            asyncio.run(NotificationService().order_cancelled(order.user, order))
     finally:
         db.close()

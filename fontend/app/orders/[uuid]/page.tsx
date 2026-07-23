@@ -393,7 +393,8 @@ export default function OrderDetailPage() {
     });
   };
 
-  const canCancel = order && CANCELLABLE_STATUSES.includes(order.status);
+  const cancellationWindowOpen = order ? (Date.now() - new Date(order.created_at).getTime()) <= 24 * 60 * 60 * 1000 : false;
+  const canCancel = order && CANCELLABLE_STATUSES.includes(order.status) && cancellationWindowOpen;
   const canReturn = order && RETURNABLE_STATUSES.includes(order.status);
 
   return (
@@ -506,6 +507,11 @@ export default function OrderDetailPage() {
                     >
                       Cancel Order
                     </button>
+                  )}
+                  {order && !canCancel && !canReturn && (
+                    <span style={{ fontSize: 12, color: T.muted, alignSelf: "center" }}>
+                      {cancellationWindowOpen ? "Cancellation is unavailable after shipping or when a return/refund is in progress." : "The 24-hour cancellation window has closed."}
+                    </span>
                   )}
                   {canReturn && (
                     <button
