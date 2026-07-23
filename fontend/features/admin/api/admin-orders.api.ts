@@ -136,6 +136,14 @@ export const assignCourierApi = async (orderUuid: string, carrier: string) => {
   return res.data;
 };
 
+export const updateOrderStatusApi = async (
+  orderUuid: string,
+  data: { status: string; description?: string; location?: string }
+) => {
+  const res = await adminApi.patch(`/admin/orders/${orderUuid}/status`, data);
+  return res.data;
+};
+
 export const addOrderTagApi = async (orderUuid: string, tag: string) => {
   const res = await adminApi.post(`/admin/orders/${orderUuid}/tags`, {
     tag,

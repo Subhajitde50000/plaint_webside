@@ -184,5 +184,12 @@ class AssignCourierRequest(BaseModel):
     carrier: str
 
 
+class UpdateOrderStatusRequest(BaseModel):
+    """An explicit admin workflow update, recorded in the customer timeline."""
+    status: str
+    description: Optional[str] = None
+    location: Optional[str] = None
+
+
 class AddTagRequest(BaseModel):
     tag: str

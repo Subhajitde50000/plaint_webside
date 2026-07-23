@@ -63,9 +63,34 @@ const STATUS_ORDER: Record<string, number> = {
   shipped: 3, out_for_delivery: 4, delivered: 5,
 };
 
-function StatusStepper({ status }: { status: OrderStatus }) {
-  const isCancelled = status === "cancelled" || status === "return_requested" || status === "refunded";
-  const currentIdx = STATUS_ORDER[status] ?? -1;
+const CUSTOMER_STATUS_STEPS = [
+  { label: "Order Placed", emoji: "📦" },
+  { label: "Payment Confirmed", emoji: "💳" },
+  { label: "Order Confirmed", emoji: "✅" },
+  { label: "Packed", emoji: "📦" },
+  { label: "Shipped", emoji: "🚚" },
+  { label: "Out For Delivery", emoji: "📍" },
+  { label: "Delivered", emoji: "🎉" },
+];
+
+function customerStatusIndex(status: OrderStatus) {
+  if (["new_order", "payment_pending", "order_placed"].includes(status)) return 0;
+  if (status === "cod_eligibility_verified") return 1;
+  if (["payment_verified", "payment_confirmed"].includes(status)) return 1;
+  if (["order_accepted", "order_confirmed", "inventory_reserved", "picking", "quality_check", "processing"].includes(status)) return 2;
+  if (["packed", "ready_for_dispatch", "courier_assigned", "picked_up"].includes(status)) return 3;
+  if (["shipped", "dispatched", "in_transit"].includes(status)) return 4;
+  if (["out_for_delivery", "cod_amount_collected"].includes(status)) return 5;
+  if (["delivered", "completed"].includes(status)) return 6;
+  return -1;
+}
+
+function StatusStepper({ status, paymentGateway }: { status: OrderStatus; paymentGateway?: string | null }) {
+  const isCancelled = ["payment_failed", "cancelled", "cancelled_by_customer", "cancelled_by_admin", "refund_pending", "refunded", "return_requested", "return_approved", "return_pickup_scheduled", "return_received", "return_inspection", "return_rejected", "return_completed"].includes(status);
+  const isCod = paymentGateway === "cod";
+  const visibleSteps = isCod ? CUSTOMER_STATUS_STEPS.filter((_, index) => index !== 1) : CUSTOMER_STATUS_STEPS;
+  const baseIdx = isCod && status === "cod_eligibility_verified" ? 0 : customerStatusIndex(status);
+  const currentIdx = isCod && baseIdx > 1 ? baseIdx - 1 : baseIdx;
 
   if (isCancelled) {
     const meta = ORDER_STATUS_META[status];
@@ -90,13 +115,13 @@ function StatusStepper({ status }: { status: OrderStatus }) {
         display: "flex", alignItems: "flex-start", minWidth: 480,
         gap: 0, position: "relative",
       }}>
-        {STATUS_STEPS.map((step, idx) => {
+        {visibleSteps.map((step, idx) => {
           const done = currentIdx > idx;
           const active = currentIdx === idx;
           return (
-            <div key={step.status} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", position: "relative" }}>
+            <div key={step.label} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", position: "relative" }}>
               {/* Connector line */}
-              {idx < STATUS_STEPS.length - 1 && (
+              {idx < visibleSteps.length - 1 && (
                 <div style={{
                   position: "absolute", top: 18, left: "50%", right: "-50%",
                   height: 3, borderRadius: 2,
@@ -501,7 +526,7 @@ export default function OrderDetailPage() {
 
             {/* Status stepper */}
             <SectionCard title="Order Status">
-              <StatusStepper status={order.status} />
+              <StatusStepper status={order.status} paymentGateway={order.payment_gateway} />
               {order.tracking_number && (
                 <div style={{
                   marginTop: 20, padding: "14px 16px", borderRadius: 10,
@@ -686,6 +711,15 @@ export default function OrderDetailPage() {
               }}>
                 ← All Orders
               </Link>
+              {(["delivered", "completed"] as string[]).includes(order.status) && (
+                <Link href="/profile" id="btn-rate-products" style={{
+                  padding: "12px 24px", borderRadius: 10, border: `1.5px solid ${T.green}`,
+                  background: T.greenPale, fontWeight: 700, fontSize: 14, textDecoration: "none",
+                  color: T.green, display: "inline-block",
+                }}>
+                  ⭐ Rate Product
+                </Link>
+              )}
               <Link href="/" id="btn-continue-shopping" style={{
                 padding: "12px 24px", borderRadius: 10, border: "none",
                 background: T.green, color: "#fff", fontWeight: 700, fontSize: 14,

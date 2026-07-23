@@ -38,10 +38,11 @@ async def create_order(
         # COD: mark as cod_pending, keep stock as reserved (not deducted yet)
         order.payment_status = "cod_pending"
         order.payment_gateway = "cod"
+        order.status = "payment_pending"
         db.add(OrderStatusHistory(
             order_id=order.id,
-            status="order_placed",
-            description="Order placed with Cash on Delivery",
+            status="payment_pending",
+            description="Cash on Delivery selected; payment pending",
         ))
         db.commit()
         return {
@@ -62,6 +63,12 @@ async def create_order(
         )
         order.razorpay_order_id = rp_order["id"]
         order.payment_gateway = "razorpay"
+        order.status = "payment_pending"
+        db.add(OrderStatusHistory(
+            order_id=order.id,
+            status="payment_pending",
+            description="Waiting for online payment confirmation",
+        ))
         db.commit()
     except Exception:
         # Razorpay not configured — dev mode: auto-confirm payment & deduct stock now
@@ -71,10 +78,10 @@ async def create_order(
     if dev_mode:
         from app.models.inventory import Inventory, InventoryHistory
         order.payment_status = "paid"
-        order.status = "payment_confirmed"
+        order.status = "payment_verified"
         db.add(OrderStatusHistory(
             order_id=order.id,
-            status="payment_confirmed",
+            status="payment_verified",
             description="Auto-confirmed (dev mode – no payment gateway)",
         ))
         for item in order.items:
@@ -126,12 +133,12 @@ async def verify_payment(
         raise HTTPException(status_code=400, detail="Invalid payment signature.")
 
     order.payment_status = "paid"
-    order.status = "payment_confirmed"
+    order.status = "payment_verified"
     order.razorpay_payment_id = payload.razorpay_payment_id
     order.razorpay_signature = payload.razorpay_signature
     db.add(OrderStatusHistory(
         order_id=order.id,
-        status="payment_confirmed",
+        status="payment_verified",
         description="Payment verified by customer",
     ))
 
@@ -240,16 +247,16 @@ async def cancel_order(
     ).first()
     if not order:
         raise HTTPException(status_code=404, detail="Order not found.")
-    if order.status not in ("order_placed", "payment_confirmed"):
+    if order.status not in ("new_order", "payment_pending", "order_placed", "payment_verified", "payment_confirmed", "order_accepted", "order_confirmed"):
         raise HTTPException(status_code=400, detail="Order cannot be cancelled at this stage.")
 
-    order.status = "cancelled"
+    order.status = "cancelled_by_customer"
     order.cancelled_at = datetime.now(timezone.utc)
     order.cancel_reason = payload.reason
     order.cancelled_by = "customer"
     db.add(OrderStatusHistory(
         order_id=order.id,
-        status="cancelled",
+        status="cancelled_by_customer",
         description=f"Cancelled by customer: {payload.reason}",
     ))
 
@@ -321,5 +328,10 @@ async def request_return(
     )
     db.add(ret)
     order.status = "return_requested"
+    db.add(OrderStatusHistory(
+        order_id=order.id,
+        status="return_requested",
+        description="Return requested by customer",
+    ))
     db.commit()
     return {"message": "Return request submitted successfully."}

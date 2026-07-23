@@ -105,6 +105,18 @@ export function useAssignCourier(orderUuid: string) {
   });
 }
 
+export function useUpdateOrderStatus(orderUuid: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: Parameters<typeof api.updateOrderStatusApi>[1]) =>
+      api.updateOrderStatusApi(orderUuid, data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-order", orderUuid] });
+      qc.invalidateQueries({ queryKey: ["admin-orders"] });
+    },
+  });
+}
+
 export function useAddOrderTag(orderUuid: string) {
   const qc = useQueryClient();
   return useMutation({

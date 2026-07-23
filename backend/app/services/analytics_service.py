@@ -61,7 +61,7 @@ class AnalyticsService:
         ).scalar() or 0
 
         shipped_today = self.db.query(func.count(Order.id)).filter(
-            Order.status.in_(["dispatched", "delivered"]),
+            Order.status.in_(["dispatched", "shipped", "delivered", "completed"]),
             func.date(Order.created_at) == today,
         ).scalar() or 0
 
@@ -80,7 +80,7 @@ class AnalyticsService:
         ).scalar() or 0
 
         shipped_yesterday = self.db.query(func.count(Order.id)).filter(
-            Order.status.in_(["dispatched", "delivered"]),
+            Order.status.in_(["dispatched", "shipped", "delivered", "completed"]),
             func.date(Order.created_at) == yesterday,
         ).scalar() or 0
 

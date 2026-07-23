@@ -5,7 +5,6 @@ import Link from "next/link";
 import {
   useAdminOrders,
   useAdminOrder,
-  useFulfillOrder,
   useCancelOrder,
   useRefundOrder,
   useAddOrderNote,
@@ -13,6 +12,7 @@ import {
   useUpdateOrderTracking,
   useAdminAnalyticsOverview,
   useAssignCourier,
+  useUpdateOrderStatus,
   useAddOrderTag,
   useDeleteOrderTag
 } from "@/features/admin/hooks/useAdminOrders";
@@ -306,6 +306,62 @@ const STATUS_TABS: { key:TabKey; label:string }[] = [
   { key:"Cancelled", label:"Cancelled" }, { key:"Returned", label:"Returned" },
 ];
 
+const WORKFLOW_STATUS_LABELS: Record<string, string> = {
+  payment_pending: "PAYMENT_PENDING", payment_verified: "PAYMENT_VERIFIED", payment_confirmed: "PAYMENT_VERIFIED",
+  payment_failed: "PAYMENT_FAILED", cod_eligibility_verified: "VERIFY_COD_ELIGIBILITY",
+  cod_amount_collected: "COD_AMOUNT_COLLECTED",
+  order_accepted: "ORDER_ACCEPTED", order_confirmed: "ORDER_ACCEPTED", inventory_reserved: "INVENTORY_RESERVED",
+  picking: "PICKING", quality_check: "QUALITY_CHECK", packed: "PACKED",
+  ready_for_dispatch: "READY_FOR_DISPATCH", courier_assigned: "COURIER_ASSIGNED",
+  picked_up: "PICKED_UP", shipped: "SHIPPED", in_transit: "IN_TRANSIT",
+  out_for_delivery: "OUT_FOR_DELIVERY", delivered: "DELIVERED", completed: "COMPLETED",
+  cancelled_by_admin: "CANCELLED_BY_ADMIN", refund_pending: "REFUND_PENDING",
+  refunded: "REFUNDED", return_requested: "RETURN_REQUESTED",
+  return_approved: "RETURN_APPROVED", return_pickup_scheduled: "RETURN_PICKUP_SCHEDULED",
+  return_received: "RETURN_RECEIVED", return_inspection: "RETURN_INSPECTION",
+  return_rejected: "RETURN_REJECTED", return_completed: "RETURN_COMPLETED",
+};
+
+function recommendedWorkflowStatuses(currentStatus: string, paymentStatus: string, paymentGateway?: string | null): string[] {
+  const paid = ["paid", "partially_paid"].includes(paymentStatus);
+  const isCod = paymentGateway === "cod";
+  const normal: Record<string, string[]> = {
+    new_order: ["payment_pending"],
+    order_placed: ["payment_pending"],
+    payment_pending: isCod ? ["cod_eligibility_verified"] : [],
+    cod_eligibility_verified: ["order_accepted"],
+    payment_verified: ["order_accepted"],
+    payment_confirmed: ["order_accepted"],
+    order_accepted: ["inventory_reserved"],
+    order_confirmed: ["inventory_reserved"],
+    inventory_reserved: ["picking"],
+    picking: ["quality_check"],
+    quality_check: ["packed"],
+    processing: ["packed"],
+    packed: ["ready_for_dispatch"],
+    ready_for_dispatch: ["courier_assigned"],
+    courier_assigned: ["picked_up", "cancelled_by_admin"],
+    picked_up: ["shipped"],
+    dispatched: ["in_transit"],
+    shipped: ["in_transit"],
+    in_transit: ["out_for_delivery"],
+    out_for_delivery: isCod ? ["cod_amount_collected"] : ["delivered"],
+    cod_amount_collected: ["delivered"],
+    delivered: ["completed", "return_requested"],
+    return_requested: ["return_approved", "return_rejected"],
+    return_approved: ["return_pickup_scheduled"],
+    return_pickup_scheduled: ["return_received"],
+    return_received: ["return_inspection"],
+    return_inspection: ["return_completed", "refund_pending", "return_rejected"],
+    return_completed: ["refund_pending"],
+    refund_pending: ["refunded"],
+  };
+  if (currentStatus === "cancelled_by_customer" || currentStatus === "cancelled_by_admin" || currentStatus === "cancelled") {
+    return paid ? ["refund_pending"] : [];
+  }
+  return normal[currentStatus] ?? [];
+}
+
 /* ════════════════════════════════════════════
    SMALL REUSABLE COMPONENTS
 ════════════════════════════════════════════ */
@@ -447,7 +503,7 @@ function OverflowMenu({ orderId, triggerId, onAction }: { orderId:string; trigge
     { label:"Edit Order",         icon:"✏️" },
     { label:"Print Invoice",      icon:"🖨" },
     { label:"Print Packing Slip", icon:"📄" },
-    { label:"Mark as Fulfilled",  icon:"✅" },
+    { label:"Shipment Details",   icon:"🚚" },
     { label:"Add Tracking Number",icon:"📦" },
     { label:"Assign Courier",     icon:"🚚" },
     null,
@@ -593,8 +649,6 @@ function OrderDetailPanel({
   const [noteText, setNoteText] = useState("");
   const [tracking, setTracking] = useState("");
   const [carrier, setCarrier]   = useState("Shiprocket");
-  const [notifyEmail, setNotifyEmail] = useState(true);
-  const [notifySms, setNotifySms]     = useState(true);
 
   // refund state
   const [refundOpen, setRefundOpen] = useState(initialRefundOpen);
@@ -609,6 +663,7 @@ function OrderDetailPanel({
   const [courierInput, setCourierInput] = useState("");
   const [isAddingTag, setIsAddingTag] = useState(initialAddTagOpen);
   const [tagInput, setTagInput] = useState("");
+  const [nextStatus, setNextStatus] = useState("");
 
   // Sync with initial props when they change
   useEffect(() => {
@@ -634,12 +689,13 @@ function OrderDetailPanel({
     setIsAddingTag(initialAddTagOpen);
   }, [initialAddTagOpen]);
 
-  const fulfillMutation = useFulfillOrder(orderSummary.uuid);
+  const trackingMutation = useUpdateOrderTracking(orderSummary.uuid);
   const cancelMutation = useCancelOrder(orderSummary.uuid);
   const refundMutation = useRefundOrder(orderSummary.uuid);
   const addNoteMutation = useAddOrderNote(orderSummary.uuid);
   const deleteNoteMutation = useDeleteOrderNote(orderSummary.uuid);
   const assignCourierMutation = useAssignCourier(orderSummary.uuid);
+  const statusMutation = useUpdateOrderStatus(orderSummary.uuid);
   const addTagMutation = useAddOrderTag(orderSummary.uuid);
   const deleteTagMutation = useDeleteOrderTag(orderSummary.uuid);
 
@@ -689,6 +745,7 @@ function OrderDetailPanel({
 
   const fSt = FULFILMENT_STYLE[mapFulfilmentStatus(order.fulfillment_status, order.status)];
   const pSt = PAYMENT_STYLE[mapPaymentStatus(order.payment_status)];
+  const recommendedStatuses = recommendedWorkflowStatuses(order.status, order.payment_status, order.payment_gateway);
 
   const timeline: Array<{ stage: string; description?: string; time: string; loc: string; done: boolean; active: boolean }> = (order.status_history || []).map((h: any) => ({
     stage: h.status.replace(/_/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase()),
@@ -725,20 +782,19 @@ function OrderDetailPanel({
     );
   };
 
-  const handleFulfil = () => {
-    fulfillMutation.mutate(
-      {
-        carrier,
-        trackingNumber: tracking,
-        notifyCustomer: notifyEmail
-      },
+  const saveShipmentDetails = () => {
+    if (!tracking.trim() || !carrier.trim()) {
+      onToast("Enter both a carrier and tracking number.");
+      return;
+    }
+    trackingMutation.mutate(
+      { carrier, trackingNumber: tracking.trim() },
       {
         onSuccess: () => {
-          onToast(`Order #${order.order_number} marked as fulfilled.`);
-          onClose();
+          onToast("Shipment details saved. Update the workflow separately when the order ships.");
         },
         onError: (err: any) => {
-          onToast(`Failed to fulfill order: ${err.response?.data?.detail || err.message}`);
+          onToast(`Failed to save shipment details: ${err.response?.data?.detail || err.message}`);
         }
       }
     );
@@ -834,7 +890,26 @@ function OrderDetailPanel({
               <div style={{ background:T.cardBg, border:`1px solid ${T.borderMuted}`,
                 borderRadius:"8px", padding:"20px" }}>
                 <div style={{ fontSize:"15px", fontWeight:600, color:T.text, marginBottom:"20px" }}>
-                  Fulfilment Timeline
+                  Order Workflow
+                </div>
+                <div style={{ display:"flex", gap:"8px", alignItems:"center", marginBottom:"18px", padding:"10px", background:T.inputBg, borderRadius:"6px" }}>
+                  <select aria-label="Update order workflow status" value={nextStatus} onChange={e=>setNextStatus(e.target.value)}
+                    style={{ flex:1, padding:"8px", background:T.cardBg, color:T.text, border:`1px solid ${T.border}`, borderRadius:"5px", fontSize:"12px" }}>
+                    <option value="">Update workflow status…</option>
+                    {recommendedStatuses.map(status => <option key={status} value={status}>{WORKFLOW_STATUS_LABELS[status]}</option>)}
+                  </select>
+                  <Btn size="sm" variant="primary" disabled={!nextStatus || statusMutation.isPending} onClick={() => {
+                    if (nextStatus === "shipped" && (!order.shipping_carrier || !order.tracking_number)) {
+                      onToast("Save carrier and tracking number in Shipment Details before marking this order as shipped.");
+                      return;
+                    }
+                    statusMutation.mutate(
+                      { status: nextStatus },
+                      { onSuccess: () => { onToast(`Status updated to ${nextStatus.replace(/_/g, " ")}.`); setNextStatus(""); }, onError: (err: any) => onToast(err.response?.data?.detail || "Could not update order status.") }
+                    );
+                  }}>
+                    {statusMutation.isPending ? "Updating…" : "Update"}
+                  </Btn>
                 </div>
                 {/* event log */}
                 <div role="list" aria-label="Fulfilment timeline"
@@ -935,7 +1010,7 @@ function OrderDetailPanel({
                 borderRadius:"8px", padding:"20px" }}>
                 <div style={{ display:"flex", justifyContent:"space-between",
                   alignItems:"center", marginBottom:"18px" }}>
-                  <span style={{ fontSize:"15px", fontWeight:600, color:T.text }}>Fulfilment Actions</span>
+                  <span style={{ fontSize:"15px", fontWeight:600, color:T.text }}>Shipment Details</span>
                   <Badge bg={fSt.bg} color={fSt.color}>{mapFulfilmentStatus(order.fulfillment_status, order.status)}</Badge>
                 </div>
                 <div style={{ display:"flex", flexDirection:"column", gap:"14px" }}>
@@ -964,25 +1039,9 @@ function OrderDetailPanel({
                       ))}
                     </select>
                   </div>
-                  <div style={{ display:"flex", flexDirection:"column", gap:"8px" }}>
-                    <label style={{ display:"flex", alignItems:"center", gap:"8px",
-                      fontSize:"12px", color:T.text, cursor:"pointer" }}>
-                      <input type="checkbox" checked={notifyEmail}
-                        onChange={e=>setNotifyEmail(e.target.checked)}
-                        style={{ accentColor:T.accent }} />
-                      Send shipment email to {orderSummary.email}
-                    </label>
-                    <label style={{ display:"flex", alignItems:"center", gap:"8px",
-                      fontSize:"12px", color:T.text, cursor:"pointer" }}>
-                      <input type="checkbox" checked={notifySms}
-                        onChange={e=>setNotifySms(e.target.checked)}
-                        style={{ accentColor:T.accent }} />
-                      Send SMS to {orderSummary.phone}
-                    </label>
-                  </div>
                   <div style={{ display:"flex", gap:"10px", paddingTop:"4px" }}>
-                    <Btn variant="primary" fullWidth disabled={fulfillMutation.isPending} onClick={handleFulfil}>
-                      {fulfillMutation.isPending ? "Processing..." : "✓ Mark as Fulfilled + Notify Customer"}
+                    <Btn variant="primary" fullWidth disabled={trackingMutation.isPending} onClick={saveShipmentDetails}>
+                      {trackingMutation.isPending ? "Saving..." : "Save Shipment Details"}
                     </Btn>
                   </div>
                 </div>
@@ -1311,10 +1370,10 @@ function OrderDetailPanel({
                   ⚑ Flag as Suspicious
                 </Btn>
 
-                {/* Mark as Fulfilled / Add Tracking */}
+                {/* Shipment details */}
                 {order.fulfillment_status !== "fulfilled" && (
                   <Btn variant="primary" size="xs" fullWidth onClick={() => setTab("fulfil")}>
-                    🚚 Mark as Fulfilled / Add Tracking
+                    🚚 Shipment Details
                   </Btn>
                 )}
 
@@ -1326,7 +1385,7 @@ function OrderDetailPanel({
                 )}
 
                 {/* Cancel Order */}
-                {order.status !== "cancelled" && order.status !== "delivered" && (
+                {!["cancelled", "cancelled_by_customer", "cancelled_by_admin", "delivered", "completed", "refunded"].includes(order.status) && (
                   <Btn variant="danger" size="xs" fullWidth onClick={() => setCancelOpen(true)}>
                     ✕ Cancel Order
                   </Btn>
@@ -1958,7 +2017,7 @@ export default function AdminOrdersPage() {
                                       setDetailAssignCourierOpen(false);
                                       setDetailAddTagOpen(false);
                                       setDetailOrder(order);
-                                    } else if (label==="Mark as Fulfilled" || label==="Add Tracking Number") {
+                                    } else if (label==="Shipment Details" || label==="Add Tracking Number") {
                                       setDetailTab("fulfil");
                                       setDetailCancelOpen(false);
                                       setDetailRefundOpen(false);

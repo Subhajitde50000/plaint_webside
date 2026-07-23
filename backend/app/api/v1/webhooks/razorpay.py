@@ -43,11 +43,11 @@ async def razorpay_webhook(
 
         if order and order.payment_status != "paid":
             order.payment_status = "paid"
-            order.status = "payment_confirmed"
+            order.status = "payment_verified"
             order.razorpay_payment_id = payment["id"]
             db.add(OrderStatusHistory(
                 order_id=order.id,
-                status="payment_confirmed",
+                status="payment_verified",
                 description="Payment captured via Razorpay webhook",
             ))
 
@@ -92,6 +92,14 @@ async def razorpay_webhook(
         ).first()
         if order:
             order.payment_status = "failed"
+            order.status = "payment_failed"
+            # The gateway order is backed by a provisional order reservation.
+            # Release it immediately when payment fails so stock is sellable again.
+            from app.models.inventory import Inventory
+            for item in order.items:
+                inv = db.query(Inventory).filter(Inventory.variant_id == item.variant_id).with_for_update().first()
+                if inv:
+                    inv.reserved = max(0, inv.reserved - item.quantity)
             db.add(OrderStatusHistory(
                 order_id=order.id,
                 status="payment_failed",
