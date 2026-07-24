@@ -2,7 +2,8 @@
 
 import { useState, useCallback, useRef, useEffect } from "react";
 import Link from "next/link";
-import { MOCK_CUSTOMERS, KPI_DATA, Customer, CustomerStatus, CustomerTier } from "./data";
+import { customerFromApi, Customer, CustomerStatus, CustomerTier } from "./data";
+import { useAdminCustomers } from "@/features/admin-customers";
 
 /* ─── tokens ─────────────────────────────────────────────────────────────── */
 const T = {
@@ -53,29 +54,6 @@ const SEGMENTS: { key: Segment; label: string }[] = [
   { key: "at_risk",     label: "At-Risk" },
   { key: "blocked",     label: "Blocked" },
 ];
-
-function filterBySegment(customers: Customer[], seg: Segment): Customer[] {
-  if (seg === "all")         return customers;
-  if (seg === "vip")         return customers.filter(c => c.tags.includes("VIP"));
-  if (seg === "gold")        return customers.filter(c => c.tier === "gold");
-  if (seg === "silver")      return customers.filter(c => c.tier === "silver");
-  if (seg === "plant_lover") return customers.filter(c => c.tier === "plant_lover");
-  if (seg === "new")         return customers.filter(c => c.status === "new");
-  if (seg === "at_risk")     return customers.filter(c => c.status === "at_risk");
-  if (seg === "blocked")     return customers.filter(c => c.status === "blocked");
-  return customers;
-}
-
-function sortCustomers(customers: Customer[], sort: SortKey): Customer[] {
-  const c = [...customers];
-  if (sort === "newest")      return c.sort((a, b) => b.id.localeCompare(a.id));
-  if (sort === "oldest")      return c.sort((a, b) => a.id.localeCompare(b.id));
-  if (sort === "highest_ltv") return c.sort((a, b) => b.ltvRaw - a.ltvRaw);
-  if (sort === "lowest_ltv")  return c.sort((a, b) => a.ltvRaw - b.ltvRaw);
-  if (sort === "most_orders") return c.sort((a, b) => b.orders - a.orders);
-  if (sort === "name_az")     return c.sort((a, b) => a.firstName.localeCompare(b.firstName));
-  return c;
-}
 
 /* ─── sub-components ─────────────────────────────────────────────────────── */
 
@@ -359,23 +337,13 @@ export default function AdminCustomersPage() {
     debounceRef.current = setTimeout(() => setDebouncedSearch(val), 250);
   }
 
-  // filter + sort
-  const afterSegment = filterBySegment(MOCK_CUSTOMERS, segment);
-  const afterSearch  = afterSegment.filter(c => {
-    const q = debouncedSearch.toLowerCase();
-    if (!q) return true;
-    return (
-      `${c.firstName} ${c.lastName}`.toLowerCase().includes(q) ||
-      c.email.toLowerCase().includes(q) ||
-      c.phone.includes(q) ||
-      c.customerId.toLowerCase().includes(q) ||
-      c.city.toLowerCase().includes(q)
-    );
+  const { data, isLoading, isError } = useAdminCustomers({
+    segment: segment === "all" ? undefined : segment, q: debouncedSearch || undefined,
+    sort, page, pageSize: PER_PAGE,
   });
-  const sorted = sortCustomers(afterSearch, sort);
-  const total  = sorted.length;
-  const pages  = Math.max(1, Math.ceil(total / PER_PAGE));
-  const paginated = sorted.slice((page - 1) * PER_PAGE, page * PER_PAGE);
+  const total = data?.total ?? 0;
+  const pages = data?.pages ?? 1;
+  const paginated = (data?.items ?? []).map(item => customerFromApi(item));
 
   function toggleSelect(id: string) {
     setSelected(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
@@ -384,11 +352,6 @@ export default function AdminCustomersPage() {
     if (selected.size === paginated.length) { setSelected(new Set()); }
     else { setSelected(new Set(paginated.map(c => c.id))); }
   }
-
-  const segCounts = SEGMENTS.reduce((acc, seg) => {
-    acc[seg.key] = filterBySegment(MOCK_CUSTOMERS, seg.key).length;
-    return acc;
-  }, {} as Record<string, number>);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 24, minHeight: "100%" }}>
@@ -418,12 +381,7 @@ export default function AdminCustomersPage() {
 
       {/* KPI Row */}
       <div role="region" aria-label="Customer metrics" style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
-        <KpiCard label="Total Customers"       value={KPI_DATA.totalCustomers.value} delta={KPI_DATA.totalCustomers.delta} positive />
-        <KpiCard label="New This Month"        value={KPI_DATA.newThisMonth.value}   delta={KPI_DATA.newThisMonth.delta}   positive />
-        <KpiCard label="Active (30d)"          value={KPI_DATA.active30d.value}      delta={KPI_DATA.active30d.delta}      positive />
-        <KpiCard label="Avg LTV"               value={KPI_DATA.avgLtv.value}         delta={KPI_DATA.avgLtv.delta}         positive />
-        <KpiCard label="VIP Customers"         value={KPI_DATA.vipCustomers.value}   delta={KPI_DATA.vipCustomers.delta}   positive />
-        <KpiCard label="At-Risk (90d no order)" value={KPI_DATA.atRisk.value}        delta={KPI_DATA.atRisk.delta}         positive={false} accent />
+        <KpiCard label="Customers in selection" value={total.toLocaleString()} delta={segment === "all" ? "Live total" : `Filtered: ${segment}`} positive />
       </div>
 
       {/* Segment Tabs */}
@@ -453,7 +411,7 @@ export default function AdminCustomersPage() {
               onFocus={e => { e.currentTarget.style.boxShadow = T.focus; }}
               onBlur={e => { e.currentTarget.style.boxShadow = "none"; }}
             >
-              {seg.label} ({segCounts[seg.key]})
+              {seg.label}
             </button>
           );
         })}
@@ -556,12 +514,12 @@ export default function AdminCustomersPage() {
               </tr>
             </thead>
             <tbody>
-              {paginated.length === 0 && (
+              {(isLoading || isError || paginated.length === 0) && (
                 <tr>
                   <td colSpan={11} style={{ textAlign: "center", padding: "64px 24px" }}>
                     <div style={{ fontSize: 36, marginBottom: 12 }}>📭</div>
-                    <div style={{ fontSize: 16, fontWeight: 600, color: T.text, marginBottom: 6 }}>No customers found</div>
-                    <div style={{ fontSize: 13, color: T.muted }}>Try adjusting your filters or search terms.</div>
+                    <div style={{ fontSize: 16, fontWeight: 600, color: T.text, marginBottom: 6 }}>{isLoading ? "Loading customers…" : isError ? "Customers could not be loaded" : "No customers found"}</div>
+                    <div style={{ fontSize: 13, color: T.muted }}>{isError ? "Please refresh the page or try again." : "Try adjusting your filters or search terms."}</div>
                   </td>
                 </tr>
               )}

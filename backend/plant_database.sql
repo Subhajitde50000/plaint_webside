@@ -752,6 +752,18 @@ CREATE TABLE IF NOT EXISTS loyalty_transactions (
     INDEX idx_created_at (created_at)
 ) ENGINE=InnoDB;
 
+-- Internal notes written by staff from the Admin Customers module.
+CREATE TABLE IF NOT EXISTS customer_notes (
+    id              BIGINT AUTO_INCREMENT PRIMARY KEY,
+    user_id         BIGINT NOT NULL,
+    admin_id        BIGINT NULL,
+    note            TEXT NOT NULL,
+    created_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (admin_id) REFERENCES admin_users(id) ON DELETE SET NULL,
+    INDEX idx_customer_notes_user_created (user_id, created_at)
+) ENGINE=InnoDB;
+
 -- ─────────────────────────────────────────────────────────────────────
 -- WISHLIST
 -- ─────────────────────────────────────────────────────────────────────
