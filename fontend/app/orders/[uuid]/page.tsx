@@ -63,9 +63,72 @@ const STATUS_ORDER: Record<string, number> = {
   shipped: 3, out_for_delivery: 4, delivered: 5,
 };
 
-function StatusStepper({ status }: { status: OrderStatus }) {
-  const isCancelled = status === "cancelled" || status === "return_requested" || status === "refunded";
-  const currentIdx = STATUS_ORDER[status] ?? -1;
+const CUSTOMER_STATUS_STEPS = [
+  { label: "Order Placed", emoji: "📦" },
+  { label: "Payment Confirmed", emoji: "💳" },
+  { label: "Order Confirmed", emoji: "✅" },
+  { label: "Packed", emoji: "📦" },
+  { label: "Shipped", emoji: "🚚" },
+  { label: "Out For Delivery", emoji: "📍" },
+  { label: "Delivered", emoji: "🎉" },
+];
+
+function customerStatusIndex(status: OrderStatus) {
+  if (["new_order", "payment_pending", "order_placed"].includes(status)) return 0;
+  if (status === "cod_eligibility_verified") return 1;
+  if (["payment_verified", "payment_confirmed"].includes(status)) return 1;
+  if (["order_accepted", "order_confirmed", "inventory_reserved", "picking", "quality_check", "processing"].includes(status)) return 2;
+  if (["packed", "ready_for_dispatch", "courier_assigned", "picked_up"].includes(status)) return 3;
+  if (["shipped", "dispatched", "in_transit"].includes(status)) return 4;
+  if (["out_for_delivery", "cod_amount_collected"].includes(status)) return 5;
+  if (["delivered", "completed"].includes(status)) return 6;
+  return -1;
+}
+
+const RETURN_STATUS_STEPS = ["Return Requested", "Approved", "Pickup Scheduled", "Returned", "Quality Check", "Refund / Replacement"];
+
+function returnStatusIndex(status: OrderStatus) {
+  if (status === "return_requested") return 0;
+  if (status === "return_approved") return 1;
+  if (status === "return_pickup_scheduled") return 2;
+  if (status === "return_received") return 3;
+  if (status === "return_inspection") return 4;
+  if (["return_completed", "refund_pending", "refunded"].includes(status)) return 5;
+  return -1;
+}
+
+function ReturnStatusTimeline({ status }: { status: OrderStatus }) {
+  const currentIdx = returnStatusIndex(status);
+  return (
+    <div style={{ overflowX: "auto", paddingBottom: 8 }}>
+      <div style={{ display: "flex", alignItems: "flex-start", minWidth: 520 }}>
+        {RETURN_STATUS_STEPS.map((label, idx) => {
+          const done = currentIdx > idx;
+          const active = currentIdx === idx;
+          return <div key={label} style={{ flex: 1, textAlign: "center", position: "relative" }}>
+            {idx < RETURN_STATUS_STEPS.length - 1 && <div style={{ position: "absolute", top: 16, left: "50%", right: "-50%", height: 3, background: done ? T.green : "rgba(0,0,0,0.08)" }} />}
+            <div style={{ position: "relative", zIndex: 1, margin: "0 auto", width: 32, height: 32, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", background: done || active ? T.green : T.bgMuted, color: done || active ? "#fff" : T.muted, border: active ? `3px solid ${T.greenMid}` : "3px solid transparent" }}>{done ? "✓" : idx + 1}</div>
+            <div style={{ marginTop: 7, fontSize: 11, lineHeight: 1.25, color: active ? T.green : done ? T.body : T.muted, fontWeight: active ? 700 : 500 }}>{label}</div>
+          </div>;
+        })}
+      </div>
+    </div>
+  );
+}
+
+function StatusStepper({ status, paymentGateway, statusHistory = [] }: { status: OrderStatus; paymentGateway?: string | null; statusHistory?: { status: string }[] }) {
+  const isCancelled = ["payment_failed", "cancelled", "cancelled_by_customer", "cancelled_by_admin", "refund_pending", "refunded", "return_requested", "return_approved", "return_pickup_scheduled", "return_received", "return_inspection", "return_rejected", "return_completed"].includes(status);
+  const isCod = paymentGateway === "cod";
+  const visibleSteps = isCod ? CUSTOMER_STATUS_STEPS.filter((_, index) => index !== 1) : CUSTOMER_STATUS_STEPS;
+  const baseIdx = isCod && status === "cod_eligibility_verified" ? 0 : customerStatusIndex(status);
+  const currentIdx = isCod && baseIdx > 1 ? baseIdx - 1 : baseIdx;
+  // Older orders may not have a complete history, but their current return
+  // status is still enough to show the correct customer-facing timeline.
+  const isReturnFlow = status.startsWith("return_") || statusHistory.some(entry => entry.status === "return_requested");
+
+  if (isReturnFlow && ["return_requested", "return_approved", "return_pickup_scheduled", "return_received", "return_inspection", "return_completed", "refund_pending", "refunded"].includes(status)) {
+    return <ReturnStatusTimeline status={status} />;
+  }
 
   if (isCancelled) {
     const meta = ORDER_STATUS_META[status];
@@ -90,13 +153,13 @@ function StatusStepper({ status }: { status: OrderStatus }) {
         display: "flex", alignItems: "flex-start", minWidth: 480,
         gap: 0, position: "relative",
       }}>
-        {STATUS_STEPS.map((step, idx) => {
+        {visibleSteps.map((step, idx) => {
           const done = currentIdx > idx;
           const active = currentIdx === idx;
           return (
-            <div key={step.status} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", position: "relative" }}>
+            <div key={step.label} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", position: "relative" }}>
               {/* Connector line */}
-              {idx < STATUS_STEPS.length - 1 && (
+              {idx < visibleSteps.length - 1 && (
                 <div style={{
                   position: "absolute", top: 18, left: "50%", right: "-50%",
                   height: 3, borderRadius: 2,
@@ -245,10 +308,10 @@ function CancelModal({
 function ReturnModal({
   isOpen, onClose, onConfirm, isLoading,
 }: { isOpen: boolean; onClose: () => void; onConfirm: (reason: string, type: string, note: string) => void; isLoading: boolean }) {
-  const [reason, setReason] = useState("Damaged product");
+  const [reason, setReason] = useState("Damaged Product");
   const [returnType, setReturnType] = useState("refund");
   const [note, setNote] = useState("");
-  const reasons = ["Damaged product", "Wrong item received", "Product not as described", "Quality issue", "Other"];
+  const reasons = ["Damaged Product", "Dead Plant", "Wrong Product", "Missing Item", "Poor Quality", "Size Issue", "Changed Mind", "Other"];
 
   return (
     <Modal title="Request Return" isOpen={isOpen} onClose={onClose}>
@@ -274,7 +337,7 @@ function ReturnModal({
             Resolution
           </label>
           <div style={{ display: "flex", gap: 10 }}>
-            {["refund", "exchange"].map((t) => (
+            {["refund", "replacement"].map((t) => (
               <button
                 key={t}
                 onClick={() => setReturnType(t)}
@@ -287,7 +350,7 @@ function ReturnModal({
                   cursor: "pointer", textTransform: "capitalize",
                 }}
               >
-                {t === "refund" ? "💸 Refund" : "🔄 Exchange"}
+                {t === "refund" ? "💸 Refund" : "🌱 Replacement"}
               </button>
             ))}
           </div>
@@ -342,6 +405,8 @@ export default function OrderDetailPage() {
   const { order, isLoading, isError, isFetching } = useOrder(orderUuid);
   const { cancelOrder, isCancelling, isSuccess: cancelDone } = useCancelOrder(orderUuid);
   const { requestReturn, isRequesting, isSuccess: returnDone } = useReturnOrder(orderUuid);
+  const orderItems = Array.isArray(order?.items) ? order.items : [];
+  const statusHistory = Array.isArray(order?.status_history) ? order.status_history : [];
 
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [showReturnModal, setShowReturnModal] = useState(false);
@@ -366,7 +431,8 @@ export default function OrderDetailPage() {
     });
   };
 
-  const canCancel = order && CANCELLABLE_STATUSES.includes(order.status);
+  const cancellationWindowOpen = order ? (Date.now() - new Date(order.created_at).getTime()) <= 24 * 60 * 60 * 1000 : false;
+  const canCancel = order && CANCELLABLE_STATUSES.includes(order.status) && cancellationWindowOpen;
   const canReturn = order && RETURNABLE_STATUSES.includes(order.status);
 
   return (
@@ -480,6 +546,11 @@ export default function OrderDetailPage() {
                       Cancel Order
                     </button>
                   )}
+                  {order && !canCancel && !canReturn && (
+                    <span style={{ fontSize: 12, color: T.muted, alignSelf: "center" }}>
+                      {cancellationWindowOpen ? "Cancellation is unavailable after shipping or when a return/refund is in progress." : "The 24-hour cancellation window has closed."}
+                    </span>
+                  )}
                   {canReturn && (
                     <button
                       id="btn-return-order"
@@ -499,7 +570,7 @@ export default function OrderDetailPage() {
 
             {/* Status stepper */}
             <SectionCard title="Order Status">
-              <StatusStepper status={order.status} />
+              <StatusStepper status={order.status} paymentGateway={order.payment_gateway} statusHistory={statusHistory} />
               {order.tracking_number && (
                 <div style={{
                   marginTop: 20, padding: "14px 16px", borderRadius: 10,
@@ -536,13 +607,13 @@ export default function OrderDetailPage() {
             </SectionCard>
 
             {/* Items */}
-            <SectionCard title={`Items (${order.items.length})`}>
+            <SectionCard title={`Items (${orderItems.length})`}>
               <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-                {order.items.map((item, idx) => (
+                {orderItems.map((item, idx) => (
                   <div key={item.id ?? idx} style={{
                     display: "flex", alignItems: "center", gap: 14,
-                    paddingBottom: idx < order.items.length - 1 ? 16 : 0,
-                    borderBottom: idx < order.items.length - 1 ? `1px solid ${T.border}` : "none",
+                    paddingBottom: idx < orderItems.length - 1 ? 16 : 0,
+                    borderBottom: idx < orderItems.length - 1 ? `1px solid ${T.border}` : "none",
                   }}>
                     {/* Image */}
                     <div style={{
@@ -631,10 +702,10 @@ export default function OrderDetailPage() {
             </SectionCard>
 
             {/* Status History */}
-            {order.status_history.length > 0 && (
+            {statusHistory.length > 0 && (
               <SectionCard title="Order Timeline">
                 <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-                  {[...order.status_history].reverse().map((entry, idx) => (
+                  {[...statusHistory].reverse().map((entry, idx) => (
                     <div key={idx} style={{ display: "flex", gap: 14, alignItems: "flex-start" }}>
                       <div style={{
                         width: 32, height: 32, borderRadius: "50%",
@@ -684,6 +755,15 @@ export default function OrderDetailPage() {
               }}>
                 ← All Orders
               </Link>
+              {(["delivered", "completed"] as string[]).includes(order.status) && (
+                <Link href="/profile" id="btn-rate-products" style={{
+                  padding: "12px 24px", borderRadius: 10, border: `1.5px solid ${T.green}`,
+                  background: T.greenPale, fontWeight: 700, fontSize: 14, textDecoration: "none",
+                  color: T.green, display: "inline-block",
+                }}>
+                  ⭐ Rate Product
+                </Link>
+              )}
               <Link href="/" id="btn-continue-shopping" style={{
                 padding: "12px 24px", borderRadius: 10, border: "none",
                 background: T.green, color: "#fff", fontWeight: 700, fontSize: 14,

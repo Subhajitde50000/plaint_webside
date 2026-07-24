@@ -1,16 +1,24 @@
 // ─── Order Status & Payment Enums ──────────────────────────────────────────
 export type OrderStatus =
+  | "new_order" | "payment_pending" | "payment_failed" | "payment_verified" | "cod_eligibility_verified" | "cod_amount_collected"
   | "order_placed"
   | "payment_confirmed"
+  | "order_accepted" | "order_confirmed" | "inventory_reserved" | "picking" | "quality_check"
   | "processing"
+  | "packed" | "ready_for_dispatch" | "courier_assigned" | "picked_up"
   | "shipped"
+  | "dispatched" | "in_transit"
   | "out_for_delivery"
   | "delivered"
+  | "completed"
   | "cancelled"
+  | "cancelled_by_customer" | "cancelled_by_admin" | "refund_pending"
   | "return_requested"
+  | "return_approved" | "return_pickup_scheduled" | "return_received"
+  | "return_inspection" | "return_rejected" | "return_completed"
   | "refunded";
 
-export type PaymentStatus = "pending" | "paid" | "failed" | "refunded";
+export type PaymentStatus = "pending" | "paid" | "failed" | "refunded" | "cod_pending";
 export type FulfillmentStatus = "unfulfilled" | "partial" | "fulfilled" | "returned";
 
 // ─── Order Item ─────────────────────────────────────────────────────────────
@@ -97,6 +105,7 @@ export interface CreateOrderPayload {
   giftMessage?: string;
   buyNowVariantId?: number;
   buyNowQuantity?: number;
+  paymentMethod?: string;  // "cod" | "razorpay"
 }
 
 export interface CreateOrderResponse {
@@ -119,13 +128,20 @@ export interface CancelOrderPayload {
 
 export interface ReturnOrderPayload {
   reason: string;
-  return_type?: string; // "refund" | "exchange"
+  return_type?: string; // "refund" | "replacement" | "exchange"
   customer_note?: string;
+  items?: { order_item_id: number; quantity: number; reason?: string }[];
+  evidence_urls?: string[];
 }
 
 // ─── Utility: cancellable and returnable statuses ────────────────────────────
-export const CANCELLABLE_STATUSES: OrderStatus[] = ["order_placed", "payment_confirmed"];
-export const RETURNABLE_STATUSES: OrderStatus[] = ["delivered"];
+export const CANCELLABLE_STATUSES: OrderStatus[] = [
+  "new_order", "payment_pending", "payment_verified", "payment_confirmed", "cod_eligibility_verified",
+  "order_placed", "order_accepted", "order_confirmed", "inventory_reserved",
+  "picking", "quality_check", "processing", "packed", "ready_for_dispatch",
+  "courier_assigned", "picked_up",
+];
+export const RETURNABLE_STATUSES: OrderStatus[] = ["delivered", "completed"];
 export const TRANSIT_STATUSES: OrderStatus[] = ["shipped", "out_for_delivery"];
 
 // ─── Human-readable status labels & colours ──────────────────────────────────
@@ -133,6 +149,33 @@ export const ORDER_STATUS_META: Record<
   OrderStatus,
   { label: string; color: string; bg: string; emoji: string }
 > = {
+  payment_failed: { label: "Payment Failed", color: "#dc2626", bg: "rgba(220,38,38,0.1)", emoji: "❌" },
+  payment_verified: { label: "Payment Confirmed", color: "#00b566", bg: "rgba(0,181,102,0.1)", emoji: "💳" },
+  cod_eligibility_verified: { label: "COD Eligibility Verified", color: "#d97706", bg: "rgba(217,119,6,0.1)", emoji: "💵" },
+  cod_amount_collected: { label: "COD Amount Collected", color: "#00b566", bg: "rgba(0,181,102,0.1)", emoji: "💵" },
+  new_order: { label: "Order Placed", color: "#2563eb", bg: "rgba(37,99,235,0.1)", emoji: "📦" },
+  payment_pending: { label: "Payment Pending", color: "#d97706", bg: "rgba(217,119,6,0.1)", emoji: "💳" },
+  order_confirmed: { label: "Order Confirmed", color: "#00b566", bg: "rgba(0,181,102,0.1)", emoji: "✅" },
+  order_accepted: { label: "Order Confirmed", color: "#00b566", bg: "rgba(0,181,102,0.1)", emoji: "✅" },
+  inventory_reserved: { label: "Inventory Reserved", color: "#d97706", bg: "rgba(217,119,6,0.1)", emoji: "📦" },
+  picking: { label: "Picking", color: "#d97706", bg: "rgba(217,119,6,0.1)", emoji: "📦" },
+  quality_check: { label: "Quality Check", color: "#d97706", bg: "rgba(217,119,6,0.1)", emoji: "✅" },
+  packed: { label: "Packed", color: "#7c3aed", bg: "rgba(124,58,237,0.1)", emoji: "📦" },
+  ready_for_dispatch: { label: "Ready for Dispatch", color: "#7c3aed", bg: "rgba(124,58,237,0.1)", emoji: "🚚" },
+  courier_assigned: { label: "Courier Assigned", color: "#7c3aed", bg: "rgba(124,58,237,0.1)", emoji: "🚚" },
+  picked_up: { label: "Picked Up", color: "#7c3aed", bg: "rgba(124,58,237,0.1)", emoji: "🚚" },
+  dispatched: { label: "Shipped", color: "#7c3aed", bg: "rgba(124,58,237,0.1)", emoji: "🚚" },
+  in_transit: { label: "Shipped", color: "#7c3aed", bg: "rgba(124,58,237,0.1)", emoji: "🚚" },
+  completed: { label: "Delivered", color: "#059669", bg: "rgba(5,150,105,0.1)", emoji: "🎉" },
+  cancelled_by_customer: { label: "Cancelled", color: "#dc2626", bg: "rgba(220,38,38,0.1)", emoji: "❌" },
+  cancelled_by_admin: { label: "Cancelled", color: "#dc2626", bg: "rgba(220,38,38,0.1)", emoji: "❌" },
+  refund_pending: { label: "Refund Processing", color: "#d97706", bg: "rgba(217,119,6,0.1)", emoji: "💰" },
+  return_approved: { label: "Return Approved", color: "#ea580c", bg: "rgba(234,88,12,0.1)", emoji: "↩️" },
+  return_pickup_scheduled: { label: "Return Pickup Scheduled", color: "#ea580c", bg: "rgba(234,88,12,0.1)", emoji: "📦" },
+  return_received: { label: "Returned", color: "#ea580c", bg: "rgba(234,88,12,0.1)", emoji: "📦" },
+  return_inspection: { label: "Return Inspection", color: "#ea580c", bg: "rgba(234,88,12,0.1)", emoji: "📦" },
+  return_rejected: { label: "Return Rejected", color: "#dc2626", bg: "rgba(220,38,38,0.1)", emoji: "❌" },
+  return_completed: { label: "Returned", color: "#ea580c", bg: "rgba(234,88,12,0.1)", emoji: "📦" },
   order_placed:       { label: "Order Placed",       color: "#2563eb", bg: "rgba(37,99,235,0.1)",   emoji: "📦" },
   payment_confirmed:  { label: "Payment Confirmed",   color: "#00b566", bg: "rgba(0,181,102,0.1)",   emoji: "✅" },
   processing:         { label: "Processing",           color: "#d97706", bg: "rgba(217,119,6,0.1)",   emoji: "⚙️" },

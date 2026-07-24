@@ -1,8 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useSyncExternalStore } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import SharedNavbar from "@/components/Navbar";
 import { useMyOrders } from "@/features/orders/hooks/useMyOrders";
 import { useAuthStore } from "@/store/auth.store";
@@ -110,7 +109,9 @@ function OrderCard({ order }: { order: OrderListItem }) {
           <div style={{ fontWeight: 800, fontSize: 18, color: T.heading, letterSpacing: "-0.02em" }}>
             {formatPrice(order.total)}
           </div>
-          <div style={{ fontSize: 12, color: T.muted, marginTop: 2 }}>Total paid</div>
+          <div style={{ fontSize: 12, color: T.muted, marginTop: 2 }}>
+            {(order as any).payment_status === "cod_pending" ? "💵 COD · Pay on delivery" : "Total paid"}
+          </div>
         </div>
 
         {/* Arrow */}
@@ -229,8 +230,14 @@ function AuthWall() {
 /* ── Main Page ────────────────────────────────────────────────────────────── */
 export default function MyOrdersPage() {
   const [page, setPage] = useState(1);
+  const isHydrated = useSyncExternalStore(
+    () => () => {},
+    () => true,
+    () => false,
+  );
   const { isAuthenticated } = useAuthStore();
   const { orders, totalPages, isLoading, isError } = useMyOrders(page);
+  const canViewOrders = isHydrated && isAuthenticated;
 
   return (
     <div style={{ minHeight: "100vh", background: T.bg, fontFamily: "'Outfit', 'Inter', sans-serif" }}>
@@ -252,7 +259,7 @@ export default function MyOrdersPage() {
           <h1 style={{ fontSize: 28, fontWeight: 800, color: T.heading, margin: 0, letterSpacing: "-0.03em" }}>
             My Orders
           </h1>
-          {!isLoading && !isAuthenticated === false && orders.length > 0 && (
+          {!isLoading && canViewOrders && orders.length > 0 && (
             <p style={{ margin: "6px 0 0", color: T.muted, fontSize: 14 }}>
               {orders.length} order{orders.length !== 1 ? "s" : ""} found
             </p>
@@ -260,17 +267,17 @@ export default function MyOrdersPage() {
         </div>
 
         {/* Auth gate */}
-        {!isAuthenticated && <AuthWall />}
+        {!canViewOrders && <AuthWall />}
 
         {/* Loading skeletons */}
-        {isAuthenticated && isLoading && (
+        {canViewOrders && isLoading && (
           <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
             {[1, 2, 3].map((i) => <SkeletonCard key={i} />)}
           </div>
         )}
 
         {/* Error */}
-        {isAuthenticated && isError && (
+        {canViewOrders && isError && (
           <div style={{
             background: "rgba(220,38,38,0.06)", border: "1.5px solid rgba(220,38,38,0.15)",
             borderRadius: T.radiusSm, padding: "18px 20px", color: "#dc2626", fontSize: 14,
@@ -280,10 +287,10 @@ export default function MyOrdersPage() {
         )}
 
         {/* Empty state */}
-        {isAuthenticated && !isLoading && !isError && orders.length === 0 && <EmptyOrders />}
+        {canViewOrders && !isLoading && !isError && orders.length === 0 && <EmptyOrders />}
 
         {/* Order list */}
-        {isAuthenticated && !isLoading && orders.length > 0 && (
+        {canViewOrders && !isLoading && orders.length > 0 && (
           <>
             <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
               {orders.map((order) => (

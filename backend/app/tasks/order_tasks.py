@@ -13,26 +13,33 @@ def post_payment_tasks(self, order_id: int):
     db = SessionLocal()
     try:
         order = db.query(Order).filter(Order.id == order_id).first()
-        if not order:
+        if not order or order.status == "cancelled":
             return
 
-        # 1. Deduct reserved inventory → actual stock
-        for item in order.items:
+        # 1. Deduct reserved inventory → actual stock (if not already done synchronously)
+        # Stock is committed only when admin accepts the order.
+        for item in ():
             inv = db.query(Inventory).filter(
                 Inventory.variant_id == item.variant_id
             ).with_for_update().first()
             if inv:
-                inv.reserved = max(0, inv.reserved - item.quantity)
-                inv.quantity = max(0, inv.quantity - item.quantity)
-                db.add(InventoryHistory(
-                    variant_id=item.variant_id,
-                    type="sale",
-                    quantity_change=-item.quantity,
-                    quantity_before=inv.quantity + item.quantity,
-                    quantity_after=inv.quantity,
-                    reason=f"Order {order.order_number} payment confirmed",
-                    reference_id=order.order_number,
-                ))
+                already_deducted = db.query(InventoryHistory).filter(
+                    InventoryHistory.reference_id == order.order_number,
+                    InventoryHistory.variant_id == item.variant_id,
+                    InventoryHistory.type == "sale",
+                ).first()
+                if not already_deducted:
+                    inv.reserved = max(0, inv.reserved - item.quantity)
+                    inv.quantity = max(0, inv.quantity - item.quantity)
+                    db.add(InventoryHistory(
+                        variant_id=item.variant_id,
+                        type="sale",
+                        quantity_change=-item.quantity,
+                        quantity_before=inv.quantity + item.quantity,
+                        quantity_after=inv.quantity,
+                        reason=f"Order {order.order_number} payment confirmed",
+                        reference_id=order.order_number,
+                    ))
 
         # 2. Award loyalty points
         if order.user_id:
@@ -96,11 +103,41 @@ def release_inventory_on_cancel(order_id: int):
         if not order:
             return
         for item in order.items:
+            # Check if a sale was logged for this order and variant
+            sale_history = db.query(InventoryHistory).filter(
+                InventoryHistory.reference_id == order.order_number,
+                InventoryHistory.variant_id == item.variant_id,
+                InventoryHistory.type == "sale"
+            ).first()
+
+            # Check if we already restocked it (to prevent duplicate restocking)
+            restock_history = db.query(InventoryHistory).filter(
+                InventoryHistory.reference_id == order.order_number,
+                InventoryHistory.variant_id == item.variant_id,
+                InventoryHistory.type == "adjustment",
+                InventoryHistory.reason.like("%cancelled (restocked)%")
+            ).first()
+
             inv = db.query(Inventory).filter(
                 Inventory.variant_id == item.variant_id
             ).with_for_update().first()
+
             if inv:
-                inv.reserved = max(0, inv.reserved - item.quantity)
+                if sale_history and not restock_history:
+                    # Payment was confirmed and quantity was already decremented; restore quantity.
+                    inv.quantity += item.quantity
+                    db.add(InventoryHistory(
+                        variant_id=item.variant_id,
+                        type="adjustment",
+                        quantity_change=item.quantity,
+                        quantity_before=inv.quantity - item.quantity,
+                        quantity_after=inv.quantity,
+                        reason=f"Order {order.order_number} cancelled (restocked)",
+                        reference_id=order.order_number,
+                    ))
+                elif not sale_history:
+                    # Payment was not confirmed; release reservation.
+                    inv.reserved = max(0, inv.reserved - item.quantity)
         db.commit()
     finally:
         db.close()
@@ -115,5 +152,17 @@ def send_fulfillment_notification(order_id: int):
         if order and order.user_id and order.user:
             notif = NotificationService()
             asyncio.run(notif.order_shipped(order.user, order))
+    finally:
+        db.close()
+
+
+@celery_app.task
+def send_cancellation_notification(order_id: int):
+    """Notify the customer of cancellation and any pending/completed refund."""
+    db = SessionLocal()
+    try:
+        order = db.query(Order).filter(Order.id == order_id).first()
+        if order and order.user_id and order.user:
+            asyncio.run(NotificationService().order_cancelled(order.user, order))
     finally:
         db.close()

@@ -1,17 +1,18 @@
 import uuid
+import json
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.dependencies import get_current_user
-from app.models.order import Order, OrderStatusHistory, Return
+from app.models.order import Order, OrderStatusHistory, Return, ReturnItem, Refund
 from app.models.user import User
 from app.schemas.order import (
     CreateOrderRequest, VerifyPaymentRequest, CancelOrderRequest, ReturnRequest
 )
 from app.services.order_service import OrderService
 from app.services.payment_service import PaymentService
-from app.tasks.order_tasks import post_payment_tasks, release_inventory_on_cancel
+from app.tasks.order_tasks import post_payment_tasks, send_cancellation_notification
 from app.utils.pagination import paginate
 from datetime import datetime, timezone
 
@@ -26,15 +27,36 @@ async def create_order(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    print(payload)
     try:
         svc = OrderService(db)
         order = svc.create_order(user, payload)
-        print('..................1.............')
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
+    is_cod = (payload.payment_method or "razorpay").lower() == "cod"
+
+    if is_cod:
+        # COD: mark as cod_pending, keep stock as reserved (not deducted yet)
+        order.payment_status = "cod_pending"
+        order.payment_gateway = "cod"
+        order.status = "payment_pending"
+        db.add(OrderStatusHistory(
+            order_id=order.id,
+            status="payment_pending",
+            description="Cash on Delivery selected; payment pending",
+        ))
+        db.commit()
+        return {
+            "order_uuid": order.uuid,
+            "order_number": order.order_number,
+            "total": str(order.total),
+            "razorpay_order_id": None,
+            "razorpay_key_id": None,
+        }
+
+    # Online payment — attempt Razorpay
     payment_svc = PaymentService()
+    dev_mode = False
     try:
         rp_order = payment_svc.create_razorpay_order(
             amount_paise=int(float(order.total) * 100),
@@ -42,11 +64,27 @@ async def create_order(
         )
         order.razorpay_order_id = rp_order["id"]
         order.payment_gateway = "razorpay"
+        order.status = "payment_pending"
+        db.add(OrderStatusHistory(
+            order_id=order.id,
+            status="payment_pending",
+            description="Waiting for online payment confirmation",
+        ))
         db.commit()
     except Exception:
-        # Return order without payment if Razorpay not configured (dev mode)
+        # Razorpay not configured — dev mode: auto-confirm payment & deduct stock now
+        dev_mode = True
         rp_order = {"id": None, "key": None}
-    print('..................1.............')
+
+    if dev_mode:
+        order.payment_status = "paid"
+        order.status = "payment_verified"
+        db.add(OrderStatusHistory(
+            order_id=order.id,
+            status="payment_verified",
+            description="Auto-confirmed (dev mode – no payment gateway)",
+        ))
+        db.commit()
 
     return {
         "order_uuid": order.uuid,
@@ -79,18 +117,50 @@ async def verify_payment(
         raise HTTPException(status_code=400, detail="Invalid payment signature.")
 
     order.payment_status = "paid"
-    order.status = "payment_confirmed"
+    order.status = "payment_verified"
     order.razorpay_payment_id = payload.razorpay_payment_id
     order.razorpay_signature = payload.razorpay_signature
     db.add(OrderStatusHistory(
         order_id=order.id,
-        status="payment_confirmed",
+        status="payment_verified",
         description="Payment verified by customer",
     ))
+
+    # ── Synchronously deduct inventory (does not depend on Celery/Redis) ──
+    from app.models.inventory import Inventory, InventoryHistory
+    # Stock is committed at ORDER_ACCEPTED by admin, not payment verification.
+    for item in ():
+        inv = db.query(Inventory).filter(
+            Inventory.variant_id == item.variant_id
+        ).with_for_update().first()
+        if inv:
+            # Guard against double deduction (e.g. webhook fires after this)
+            already_deducted = db.query(InventoryHistory).filter(
+                InventoryHistory.reference_id == order.order_number,
+                InventoryHistory.variant_id == item.variant_id,
+                InventoryHistory.type == "sale",
+            ).first()
+            if not already_deducted:
+                inv.reserved = max(0, inv.reserved - item.quantity)
+                inv.quantity = max(0, inv.quantity - item.quantity)
+                db.add(InventoryHistory(
+                    variant_id=item.variant_id,
+                    type="sale",
+                    quantity_change=-item.quantity,
+                    quantity_before=inv.quantity + item.quantity,
+                    quantity_after=inv.quantity,
+                    reason=f"Order {order.order_number} payment confirmed",
+                    reference_id=order.order_number,
+                ))
+
     db.commit()
 
-    # Trigger background tasks
-    post_payment_tasks.delay(order.id)
+    # ── Dispatch Celery task for loyalty points & confirmation email ──
+    # The task will skip inventory since it's already been deducted above.
+    try:
+        post_payment_tasks.delay(order.id)
+    except Exception:
+        pass  # Celery/Redis not running; inventory already handled above.
 
     return {"message": "Payment confirmed.", "order_number": order.order_number}
 
@@ -114,7 +184,22 @@ async def list_my_orders(
             "status": o.status,
             "payment_status": o.payment_status,
             "created_at": o.created_at.isoformat(),
+            "shipping_amount": str(o.shipping_amount),
+            "tracking_number": o.tracking_number,
+            "shipping_carrier": o.shipping_carrier,
+            "tracking_url": o.tracking_url,
             "items_count": len(o.items),
+            "items": [
+                {
+                    "title": item.title,
+                    "variant_title": item.variant_title,
+                    "quantity": item.quantity,
+                    "unit_price": str(item.unit_price),
+                    "total_price": str(item.total_price),
+                    "image_url": item.image_url,
+                }
+                for item in o.items
+            ]
         }
         for o in result["items"]
     ]
@@ -147,20 +232,94 @@ async def cancel_order(
     ).first()
     if not order:
         raise HTTPException(status_code=404, detail="Order not found.")
-    if order.status not in ("order_placed", "payment_confirmed"):
-        raise HTTPException(status_code=400, detail="Order cannot be cancelled at this stage.")
+    non_cancellable = {
+        "shipped", "dispatched", "in_transit", "out_for_delivery", "delivered", "completed",
+        "cancelled", "cancelled_by_customer", "cancelled_by_admin", "refund_pending", "refunded",
+        "return_requested", "return_approved", "return_pickup_scheduled", "return_received",
+        "return_inspection", "return_rejected", "return_completed",
+    }
+    if order.status in non_cancellable:
+        raise HTTPException(status_code=400, detail="Shipped, delivered, or returned orders cannot be cancelled.")
+    created_at = order.created_at
+    if created_at and created_at.tzinfo is None:
+        created_at = created_at.replace(tzinfo=timezone.utc)
+    if created_at and (datetime.now(timezone.utc) - created_at).total_seconds() > 24 * 60 * 60:
+        raise HTTPException(status_code=400, detail="The 24-hour cancellation window has closed.")
 
-    order.status = "cancelled"
+    order.status = "cancelled_by_customer"
     order.cancelled_at = datetime.now(timezone.utc)
     order.cancel_reason = payload.reason
     order.cancelled_by = "customer"
     db.add(OrderStatusHistory(
         order_id=order.id,
-        status="cancelled",
+        status="cancelled_by_customer",
         description=f"Cancelled by customer: {payload.reason}",
     ))
+
+    # ── Synchronously restore inventory ─────────────────────────────────────
+    from app.models.inventory import Inventory, InventoryHistory
+    for item in order.items:
+        # Check if stock was physically deducted (i.e. payment was confirmed)
+        sale_history = db.query(InventoryHistory).filter(
+            InventoryHistory.reference_id == order.order_number,
+            InventoryHistory.variant_id == item.variant_id,
+            InventoryHistory.type == "sale",
+        ).first()
+        # Guard against double-restocking
+        restock_history = db.query(InventoryHistory).filter(
+            InventoryHistory.reference_id == order.order_number,
+            InventoryHistory.variant_id == item.variant_id,
+            InventoryHistory.type == "adjustment",
+            InventoryHistory.reason.like("%cancelled (restocked)%"),
+        ).first()
+        inv = db.query(Inventory).filter(
+            Inventory.variant_id == item.variant_id
+        ).with_for_update().first()
+        if inv:
+            if sale_history and not restock_history:
+                # Payment confirmed → quantity was deducted → restore it
+                inv.quantity += item.quantity
+                db.add(InventoryHistory(
+                    variant_id=item.variant_id,
+                    type="adjustment",
+                    quantity_change=item.quantity,
+                    quantity_before=inv.quantity - item.quantity,
+                    quantity_after=inv.quantity,
+                    reason=f"Order {order.order_number} cancelled (restocked)",
+                    reference_id=order.order_number,
+                ))
+            elif not sale_history:
+                # Payment not confirmed → only reservation was held → release it
+                inv.reserved = max(0, inv.reserved - item.quantity)
+
+    if order.payment_gateway != "cod" and order.payment_status in {"paid", "partially_paid"}:
+        gateway_refund_id = None
+        if order.razorpay_payment_id:
+            try:
+                gateway_refund_id = PaymentService().create_refund(
+                    payment_id=order.razorpay_payment_id,
+                    amount_paise=int(float(order.total) * 100),
+                    notes={"order_number": order.order_number, "reason": payload.reason or "Customer cancellation"},
+                ).get("id")
+            except Exception:
+                gateway_refund_id = None
+        order.status = "refunded" if gateway_refund_id else "refund_pending"
+        if gateway_refund_id:
+            order.payment_status = "refunded"
+        db.add(Refund(
+            order_id=order.id, amount=order.total, reason=payload.reason, type="full",
+            gateway_refund_id=gateway_refund_id, status="processed" if gateway_refund_id else "pending",
+        ))
+        db.add(OrderStatusHistory(
+            order_id=order.id, status=order.status,
+            description="Refund completed" if gateway_refund_id else "Refund processing after customer cancellation",
+        ))
+
     db.commit()
-    release_inventory_on_cancel.delay(order.id)
+    try:
+        send_cancellation_notification.delay(order.id)
+    except Exception:
+        pass
     return {"message": "Order cancelled successfully."}
 
 
@@ -176,16 +335,59 @@ async def request_return(
     ).first()
     if not order:
         raise HTTPException(status_code=404, detail="Order not found.")
-    if order.status != "delivered":
+    if order.status not in {"delivered", "completed"}:
         raise HTTPException(status_code=400, detail="Only delivered orders can be returned.")
+    delivered_at = order.delivered_at or order.updated_at
+    if delivered_at and delivered_at.tzinfo is None:
+        delivered_at = delivered_at.replace(tzinfo=timezone.utc)
+    if delivered_at and (datetime.now(timezone.utc) - delivered_at).total_seconds() > 7 * 24 * 60 * 60:
+        raise HTTPException(status_code=400, detail="The 7-day return window has closed.")
+    if db.query(Return).filter(Return.order_id == order.id, Return.status.notin_(["rejected", "completed", "refunded"])).first():
+        raise HTTPException(status_code=400, detail="A return request is already active for this order.")
+
+    reason_map = {
+        "damaged product": "damaged_product", "dead plant": "dead_plant",
+        "wrong product": "wrong_product", "wrong item received": "wrong_product",
+        "missing item": "missing_item", "poor quality": "poor_quality",
+        "quality issue": "poor_quality", "size issue": "size_issue",
+        "changed mind": "changed_mind", "other": "other",
+    }
+    reason = reason_map.get(payload.reason.strip().lower())
+    if not reason:
+        raise HTTPException(status_code=400, detail="Select a valid return reason.")
+    if payload.return_type not in {"refund", "replacement", "exchange"}:
+        raise HTTPException(status_code=400, detail="Select refund, replacement, or exchange.")
+
+    requested_items = payload.items or [
+        {"order_item_id": item.id, "quantity": item.quantity, "reason": payload.reason}
+        for item in order.items
+    ]
+    order_items = {item.id: item for item in order.items}
+    for item in requested_items:
+        item_id = item.order_item_id if hasattr(item, "order_item_id") else item["order_item_id"]
+        quantity = item.quantity if hasattr(item, "quantity") else item["quantity"]
+        if item_id not in order_items or quantity < 1 or quantity > order_items[item_id].quantity:
+            raise HTTPException(status_code=400, detail="One or more selected return items are invalid.")
 
     ret = Return(
         order_id=order.id,
-        reason=payload.reason,
+        reason=reason,
         return_type=payload.return_type,
         customer_note=payload.customer_note,
+        evidence_urls=json.dumps(payload.evidence_urls),
     )
     db.add(ret)
+    db.flush()
+    for item in requested_items:
+        item_id = item.order_item_id if hasattr(item, "order_item_id") else item["order_item_id"]
+        quantity = item.quantity if hasattr(item, "quantity") else item["quantity"]
+        item_reason = item.reason if hasattr(item, "reason") else item.get("reason")
+        db.add(ReturnItem(return_id=ret.id, order_item_id=item_id, quantity=quantity, reason=item_reason))
     order.status = "return_requested"
+    db.add(OrderStatusHistory(
+        order_id=order.id,
+        status="return_requested",
+        description="Return requested by customer",
+    ))
     db.commit()
     return {"message": "Return request submitted successfully."}

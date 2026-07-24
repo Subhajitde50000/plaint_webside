@@ -35,14 +35,22 @@ class Order(Base):
     # Status
     status = Column(
         Enum(
-            "order_placed", "payment_confirmed", "processing",
-            "packed", "dispatched", "in_transit", "out_for_delivery",
-            "delivered", "delivery_attempted", "cancelled",
-            "return_requested", "return_in_transit",
-            "return_received", "refund_initiated", "refunded",
+            # Canonical operational workflow.  Legacy values are retained so
+            # existing orders can still be read while they are migrated.
+            "new_order", "payment_pending", "payment_failed", "payment_verified", "payment_confirmed",
+            "cod_eligibility_verified", "cod_amount_collected",
+            "order_accepted", "order_confirmed", "inventory_reserved", "picking", "quality_check",
+            "packed", "ready_for_dispatch", "courier_assigned", "picked_up",
+            "shipped", "in_transit", "out_for_delivery", "delivered", "completed",
+            "cancelled_by_customer", "cancelled_by_admin",
+            "refund_pending", "refunded",
+            "return_requested", "return_approved", "return_pickup_scheduled",
+            "return_received", "return_inspection", "return_rejected", "return_completed",
+            "order_placed", "processing", "dispatched", "delivery_attempted",
+            "cancelled", "return_in_transit", "refund_initiated",
         ),
         nullable=False,
-        default="order_placed",
+        default="new_order",
     )
     payment_status = Column(
         Enum(
@@ -185,16 +193,17 @@ class Return(Base):
     id = Column(BigInteger, primary_key=True, autoincrement=True)
     order_id = Column(BigInteger, ForeignKey("orders.id"), nullable=False)
     reason = Column(
-        Enum("damaged_in_transit", "wrong_item", "changed_mind", "quality_issue", "other"),
+        Enum("damaged_product", "dead_plant", "wrong_product", "missing_item", "poor_quality", "size_issue", "changed_mind", "other", "damaged_in_transit", "wrong_item", "quality_issue"),
         nullable=False,
     )
-    return_type = Column(Enum("refund", "exchange", "store_credit"), default="refund")
+    return_type = Column(Enum("refund", "replacement", "exchange", "store_credit"), default="refund")
     status = Column(
-        Enum("requested", "approved", "rejected", "in_transit", "received", "refund_issued"),
+        Enum("requested", "approved", "rejected", "pickup_scheduled", "picked_up", "received", "inspection", "refund_pending", "refunded", "replacement_created", "completed", "in_transit", "refund_issued"),
         default="requested",
     )
     customer_note = Column(Text)
     admin_note = Column(Text)
+    evidence_urls = Column(Text)  # JSON array of customer-uploaded image/video URLs
     return_tracking = Column(String(100))
     processed_by = Column(BigInteger, ForeignKey("admin_users.id", ondelete="SET NULL"))
     created_at = Column(DateTime, server_default=func.now())
@@ -229,6 +238,7 @@ class OrderNote(Base):
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
 
     order = relationship("Order", back_populates="notes_list")
+    admin = relationship("AdminUser")
 
 
 class OrderTag(Base):

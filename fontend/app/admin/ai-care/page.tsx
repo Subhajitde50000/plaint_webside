@@ -567,8 +567,10 @@ function DonutChart({ segments, size = 120, label }: {
 
   const describeArc = (start: number, end: number) => {
     const a1 = (start * Math.PI) / 180, a2 = (end * Math.PI) / 180;
-    const x1 = cx + r * Math.cos(a1), y1 = cy + r * Math.sin(a1);
-    const x2 = cx + r * Math.cos(a2), y2 = cy + r * Math.sin(a2);
+    const x1 = (cx + r * Math.cos(a1)).toFixed(4);
+    const y1 = (cy + r * Math.sin(a1)).toFixed(4);
+    const x2 = (cx + r * Math.cos(a2)).toFixed(4);
+    const y2 = (cy + r * Math.sin(a2)).toFixed(4);
     const large = end - start > 180 ? 1 : 0;
     return `M${x1},${y1} A${r},${r} 0 ${large} 1 ${x2},${y2}`;
   };

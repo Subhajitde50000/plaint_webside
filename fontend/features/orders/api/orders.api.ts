@@ -8,6 +8,7 @@ export const createOrderApi = async (payload: {
   giftMessage?: string;
   buyNowVariantId?: number;
   buyNowQuantity?: number;
+  paymentMethod?: string;
 }) => {
   const res = await api.post("/orders/", {
     address_id: payload.addressId,
@@ -17,6 +18,7 @@ export const createOrderApi = async (payload: {
     gift_message: payload.giftMessage,
     buy_now_variant_id: payload.buyNowVariantId,
     buy_now_quantity: payload.buyNowQuantity,
+    payment_method: payload.paymentMethod ?? "razorpay",
   });
   return res.data;  // { order_id, order_number, total, razorpay_order_id, razorpay_key_id }
 };
@@ -50,7 +52,7 @@ export const cancelOrderApi = async (orderUuid: string, reason: string) => {
 
 export const returnOrderApi = async (
   orderUuid: string,
-  payload: { reason: string; return_type?: string; customer_note?: string }
+  payload: { reason: string; return_type?: string; customer_note?: string; items?: { order_item_id: number; quantity: number; reason?: string }[]; evidence_urls?: string[] }
 ) => {
   const res = await api.post(`/orders/${orderUuid}/return`, payload);
   return res.data;

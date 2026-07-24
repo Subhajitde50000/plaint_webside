@@ -52,30 +52,73 @@ const PlantBystLogo = () => (
   </svg>
 );
 
-// Simulated QR Code SVG
-const SimulatedQRCode = () => (
-  <svg width="120" height="120" viewBox="0 0 120 120" fill="none" style={{ background: "white", padding: 8, borderRadius: 8, border: `1px solid ${T.border}` }}>
-    <rect x="10" y="10" width="30" height="30" stroke="#1c1c1c" strokeWidth="4" fill="none" />
-    <rect x="18" y="18" width="14" height="14" fill="#1c1c1c" />
-    <rect x="80" y="10" width="30" height="30" stroke="#1c1c1c" strokeWidth="4" fill="none" />
-    <rect x="88" y="18" width="14" height="14" fill="#1c1c1c" />
-    <rect x="10" y="80" width="30" height="30" stroke="#1c1c1c" strokeWidth="4" fill="none" />
-    <rect x="18" y="88" width="14" height="14" fill="#1c1c1c" />
-    
-    {/* Random QR code pixels */}
-    <rect x="50" y="15" width="8" height="8" fill="#1c1c1c" />
-    <rect x="62" y="25" width="8" height="8" fill="#1c1c1c" />
-    <rect x="50" y="38" width="16" height="8" fill="#1c1c1c" />
-    <rect x="55" y="55" width="8" height="16" fill="#1c1c1c" />
-    <rect x="15" y="55" width="16" height="8" fill="#1c1c1c" />
-    <rect x="80" y="55" width="24" height="8" fill="#1c1c1c" />
-    <rect x="70" y="70" width="8" height="8" fill="#1c1c1c" />
-    <rect x="50" y="80" width="16" height="16" fill="#1c1c1c" />
-    <rect x="80" y="80" width="8" height="24" fill="#1c1c1c" />
-    <rect x="95" y="95" width="16" height="8" fill="#1c1c1c" />
-    <rect x="70" y="100" width="8" height="8" fill="#1c1c1c" />
-  </svg>
-);
+// ── Real UPI QR Code (Google Charts API — no package needed) ────────────────
+const MERCHANT_UPI_ID = "plantbyst@upi";  // ← change to your real UPI ID
+const MERCHANT_NAME   = "PlantByst";
+
+function UpiQrCode({ amount }: { amount: number }) {
+  // Encode a real UPI payment deep link
+  const upiUrl = [
+    `upi://pay`,
+    `?pa=${encodeURIComponent(MERCHANT_UPI_ID)}`,
+    `&pn=${encodeURIComponent(MERCHANT_NAME)}`,
+    `&am=${amount.toFixed(2)}`,
+    `&cu=INR`,
+    `&tn=${encodeURIComponent("PlantByst Order Payment")}`,
+  ].join("");
+
+  // Google Charts QR API — free, no auth, works in browser
+  const qrSrc = `https://chart.googleapis.com/chart?cht=qr&chs=200x200&chld=M|2&chl=${encodeURIComponent(upiUrl)}`;
+
+  return (
+    <div style={{
+      background: "#fff",
+      padding: 10,
+      borderRadius: 12,
+      border: `2px solid ${T.borderGreen}`,
+      display: "inline-block",
+      boxShadow: "0 4px 16px rgba(0,181,102,0.12)",
+      position: "relative",
+    }}>
+      {/* QR image from Google Charts */}
+      <img
+        src={qrSrc}
+        alt="UPI QR Code"
+        width={160}
+        height={160}
+        style={{ display: "block", borderRadius: 6 }}
+        onError={(e) => {
+          // Fallback if Google Charts is unavailable
+          (e.currentTarget as HTMLImageElement).style.display = "none";
+          const fb = e.currentTarget.nextSibling as HTMLElement;
+          if (fb) fb.style.display = "flex";
+        }}
+      />
+      {/* Fallback message */}
+      <div style={{
+        display: "none", width: 160, height: 160,
+        alignItems: "center", justifyContent: "center",
+        flexDirection: "column", gap: 8, color: T.muted, fontSize: 12,
+        textAlign: "center", padding: 16,
+      }}>
+        <span style={{ fontSize: 32 }}>📱</span>
+        Open GPay / Paytm and pay to<br />
+        <strong style={{ color: T.heading }}>{MERCHANT_UPI_ID}</strong>
+      </div>
+      {/* PlantByst branding badge on QR */}
+      <div style={{
+        position: "absolute", bottom: -12, left: "50%",
+        transform: "translateX(-50%)",
+        background: T.green, color: "#fff",
+        fontSize: 10, fontWeight: 700,
+        padding: "3px 10px", borderRadius: 20,
+        whiteSpace: "nowrap", letterSpacing: "0.04em",
+      }}>
+        🌱 PlantByst
+      </div>
+    </div>
+  );
+}
 
 function CheckoutContent() {
   const searchParams = useSearchParams();
@@ -309,38 +352,20 @@ function CheckoutContent() {
   // Submit payment form handler
   const handlePaymentSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    
-    // Check validation based on selected payment method
-    if (paymentMethod === "card") {
-      if (!cardNumber || !cardName || !cardExpiry || !cardCvv) {
-        alert("Please fill out all Credit Card fields.");
-        return;
-      }
-    } else if (paymentMethod === "upi") {
-      if (!upiId && !selectedUpiApp) {
-        alert("Please enter a UPI ID or scan the QR Code.");
-        return;
-      }
-    } else if (paymentMethod === "netbanking") {
-      if (!selectedBank) {
-        alert("Please select a bank for Net Banking.");
-        return;
-      }
-    } else if (paymentMethod === "emi") {
-      if (!selectedEmiBank || !selectedEmiTenure) {
-        alert("Please select an EMI bank and installment tenure plan.");
-        return;
-      }
-    } else if (paymentMethod === "cod") {
-      if (!codConfirmed) {
-        alert("Please confirm the Cash on Delivery terms by checking the box.");
-        return;
-      }
+
+    // For COD only — user must explicitly confirm they'll pay on delivery
+    if (paymentMethod === "cod" && !codConfirmed) {
+      alert("Please confirm the Cash on Delivery terms by checking the box.");
+      return;
     }
 
-    // Call backend: create order → open Razorpay → verify → redirect to success
+    // For online methods (card / upi / netbanking / emi):
+    // The actual card/UPI details are captured securely by the Razorpay modal —
+    // frontend fields are just UI previews, so we skip blocking validation here.
+
     const orderPayload: any = {
       addressId: String(selectedAddressId),
+      paymentMethod: paymentMethod === "cod" ? "cod" : "razorpay",
     };
 
     if (buyNowItem) {
@@ -1212,35 +1237,69 @@ function CheckoutContent() {
                   {/* TAB 2: UPI / QR PAYMENT */}
                   {paymentMethod === "upi" && (
                     <div className="scale-in">
-                      <div style={{ display: "flex", gap: "28px", alignItems: "center", flexWrap: "wrap", justifyContent: "center", marginBottom: "24px" }}>
-                        {/* Simulated QR Code Scan */}
-                        <div style={{ textAlign: "center" }}>
-                          <SimulatedQRCode />
-                          <p style={{ fontSize: "11px", color: T.muted, marginTop: "8px", fontWeight: 600 }}>Scan with GPay, Paytm, or PhonePe</p>
+                      {/* QR + Info layout */}
+                      <div style={{ display: "flex", gap: "28px", alignItems: "flex-start", flexWrap: "wrap", justifyContent: "center", marginBottom: "24px" }}>
+
+                        {/* Real UPI QR Code */}
+                        <div style={{ textAlign: "center", paddingBottom: 16 }}>
+                          <UpiQrCode amount={total} />
+                          <p style={{ fontSize: "11px", color: T.muted, marginTop: "20px", fontWeight: 600 }}>
+                            Scan with any UPI app
+                          </p>
+                          <p style={{ fontSize: "10px", color: T.muted, margin: "2px 0 0" }}>
+                            GPay · PhonePe · Paytm · BHIM
+                          </p>
                         </div>
 
-                        <div style={{ flex: 1, minWidth: "240px" }}>
-                          <h3 style={{ fontSize: "14px", fontWeight: 700, color: T.heading, margin: "0 0 10px" }}>Simulate UPI Payment</h3>
-                          <p style={{ fontSize: "13px", color: T.body, margin: "0 0 16px", lineHeight: "1.4" }}>
-                            Scan the QR code to make an instant payment of <strong>${total.toFixed(2)}</strong>, or enter your UPI ID below to receive a payment request.
+                        {/* Right side info */}
+                        <div style={{ flex: 1, minWidth: "220px" }}>
+                          <h3 style={{ fontSize: "14px", fontWeight: 700, color: T.heading, margin: "0 0 6px" }}>Pay via UPI</h3>
+                          <p style={{ fontSize: "13px", color: T.body, margin: "0 0 14px", lineHeight: "1.5" }}>
+                            Scan the QR code to pay <strong>₹{total.toFixed(2)}</strong> instantly, or enter your UPI ID below to proceed.
                           </p>
 
-                          <div className="form-group" style={{ marginBottom: "14px" }}>
-                            <label className="input-label">Enter UPI ID</label>
-                            <div style={{ display: "flex", gap: "8px" }}>
-                              <input className="edit-input" value={upiId} onChange={e => { setUpiId(e.target.value); setSelectedUpiApp(""); }} placeholder="e.g. username@upi" required={paymentMethod === "upi" && !selectedUpiApp} />
+                          {/* Merchant UPI ID display */}
+                          <div style={{
+                            background: T.bgSection,
+                            border: `1px solid ${T.borderGreen}`,
+                            borderRadius: 10, padding: "10px 14px",
+                            marginBottom: 14,
+                          }}>
+                            <div style={{ fontSize: 11, color: T.muted, fontWeight: 600, marginBottom: 2 }}>PAY TO UPI ID</div>
+                            <div style={{ fontSize: 14, fontWeight: 700, color: T.green, letterSpacing: "0.01em" }}>
+                              {MERCHANT_UPI_ID}
                             </div>
+                          </div>
+
+                          <div className="form-group" style={{ marginBottom: "14px" }}>
+                            <label className="input-label">Your UPI ID (optional)</label>
+                            <input
+                              className="edit-input"
+                              value={upiId}
+                              onChange={e => { setUpiId(e.target.value); setSelectedUpiApp(""); }}
+                              placeholder="e.g. yourname@okicici"
+                            />
                           </div>
 
                           {/* Quick UPI App buttons */}
                           <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-                            {["GPay (@okaxis)", "PhonePe (@ybl)", "Paytm (@paytm)"].map(app => (
-                              <button key={app} type="button" className={`saved-card-option ${selectedUpiApp === app ? "active" : ""}`} onClick={() => {
-                                setSelectedUpiApp(app);
-                                const suffix = app.split(" ").pop()?.replace(/[()]/g, "") || "";
-                                setUpiId(`subhajit${suffix}`);
-                              }} style={{ padding: "8px 12px", fontSize: "12px" }}>
-                                {app.split(" ")[0]}
+                            {[
+                              { label: "GPay",    handle: "@okaxis"  },
+                              { label: "PhonePe", handle: "@ybl"    },
+                              { label: "Paytm",   handle: "@paytm"  },
+                              { label: "BHIM",    handle: "@upi"    },
+                            ].map(app => (
+                              <button
+                                key={app.label}
+                                type="button"
+                                className={`saved-card-option ${selectedUpiApp === app.label ? "active" : ""}`}
+                                onClick={() => {
+                                  setSelectedUpiApp(app.label);
+                                  setUpiId(``);
+                                }}
+                                style={{ padding: "8px 14px", fontSize: "12px", fontWeight: 600 }}
+                              >
+                                {app.label}
                               </button>
                             ))}
                           </div>
@@ -1321,8 +1380,8 @@ function CheckoutContent() {
                                         </div>
                                       </td>
                                       <td>{rate}% p.a.</td>
-                                      <td style={{ fontWeight: 700, color: T.greenMid }}>${monthly.toFixed(2)} / mo</td>
-                                      <td style={{ fontWeight: 600 }}>${emiTotal.toFixed(2)}</td>
+                                      <td style={{ fontWeight: 700, color: T.greenMid }}>₹{monthly.toFixed(2)} / mo</td>
+                                      <td style={{ fontWeight: 600 }}>₹{emiTotal.toFixed(2)}</td>
                                     </tr>
                                   );
                                 })}
@@ -1343,13 +1402,13 @@ function CheckoutContent() {
                       <h3 style={{ fontSize: "14px", fontWeight: 700, color: T.heading, margin: "0 0 8px" }}>📦 Cash on Delivery (COD) Guidelines</h3>
                       <p style={{ fontSize: "13.5px", color: T.body, margin: "0 0 16px", lineHeight: "1.5" }}>
                         Pay with cash or scan a delivery agent's UPI code at the time of delivery. 
-                        Please ensure you have exact change of <strong>${total.toFixed(2)}</strong> ready to avoid delays.
+                        Please ensure you have exact change of <strong>₹{total.toFixed(2)}</strong> ready to avoid delays.
                       </p>
 
                       <div style={{ display: "flex", gap: "8px", alignItems: "flex-start", marginTop: "12px" }}>
                         <input type="checkbox" id="cod-confirm-checkbox" checked={codConfirmed} onChange={e => setCodConfirmed(e.target.checked)} required={paymentMethod === "cod"} style={{ marginTop: "4px", cursor: "pointer" }} />
                         <label htmlFor="cod-confirm-checkbox" style={{ fontSize: "13px", color: T.body, cursor: "pointer", fontWeight: 500, userSelect: "none" }}>
-                          I confirm that I will pay <strong>${total.toFixed(2)}</strong> in cash or UPI upon delivery at the registered shipping address.
+                          I confirm that I will pay <strong>₹{total.toFixed(2)}</strong> in cash or UPI upon delivery at the registered shipping address.
                         </label>
                       </div>
                     </div>
@@ -1392,7 +1451,7 @@ function CheckoutContent() {
                       </p>
                     </div>
                     <span style={{ fontSize: 13, fontWeight: 700, color: T.heading }}>
-                      ${(item.price * item.qty).toFixed(2)}
+                      ₹{(item.price * item.qty).toFixed(2)}
                     </span>
                   </div>
                 ))}
@@ -1402,27 +1461,27 @@ function CheckoutContent() {
               <div style={{ display: "flex", flexDirection: "column", gap: 10, borderTop: `1px solid ${T.border}`, borderBottom: `1px solid ${T.border}`, padding: "14px 0", marginBottom: 16 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, color: T.body }}>
                   <span>Subtotal</span>
-                  <span style={{ fontWeight: 500 }}>${subtotal.toFixed(2)}</span>
+                  <span style={{ fontWeight: 500 }}>₹{subtotal.toFixed(2)}</span>
                 </div>
                 <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, color: T.body }}>
                   <span>Shipping</span>
-                  <span>{shippingFee === 0 ? <span style={{ color: T.green, fontWeight: 600 }}>Free</span> : `$${shippingFee.toFixed(2)}`}</span>
+                  <span>{shippingFee === 0 ? <span style={{ color: T.green, fontWeight: 600 }}>Free</span> : `₹${shippingFee.toFixed(2)}`}</span>
                 </div>
                 <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, color: T.body }}>
                   <span>Tax (8%)</span>
-                  <span style={{ fontWeight: 500 }}>${taxAmount.toFixed(2)}</span>
+                  <span style={{ fontWeight: 500 }}>₹{taxAmount.toFixed(2)}</span>
                 </div>
               </div>
 
               {/* Final price */}
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                 <span style={{ fontSize: 14, fontWeight: 700, color: T.muted }}>Total Amount</span>
-                <span style={{ fontSize: 22, fontWeight: 800, color: T.heading }}>${total.toFixed(2)}</span>
+                <span style={{ fontSize: 22, fontWeight: 800, color: T.heading }}>₹{total.toFixed(2)}</span>
               </div>
 
               {shippingFee > 0 && (
                 <div style={{ marginTop: "14px", background: "rgba(0,181,102,0.06)", border: `1px dashed ${T.green}`, borderRadius: "8px", padding: "10px", fontSize: "11px", color: T.greenMid, textAlign: "center", fontWeight: 500 }}>
-                  💡 Add ${(50.00 - subtotal).toFixed(2)} more for Free Shipping!
+                  💡 Add ₹{(999.00 - subtotal).toFixed(2)} more for Free Shipping!
                 </div>
               )}
             </div>

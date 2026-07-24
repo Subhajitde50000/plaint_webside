@@ -64,7 +64,7 @@ export function CareInfoPanel({ data, errors, onChange }: Props) {
         <FieldLabel>Skill Level</FieldLabel>
         <Select value={data.skillLevel} onChange={e => onChange('skillLevel', e.target.value)}>
           <option value="">Select skill level…</option>
-          {SKILL_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
+          {SKILL_OPTIONS.map(s => <option key={s} value={s.toLowerCase()}>{s}</option>)}
         </Select>
       </div>
 

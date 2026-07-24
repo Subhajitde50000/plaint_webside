@@ -2,6 +2,21 @@
 
 import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
+import {
+  useAdminOrders,
+  useAdminOrder,
+  useCancelOrder,
+  useRefundOrder,
+  useAddOrderNote,
+  useDeleteOrderNote,
+  useUpdateOrderTracking,
+  useAdminAnalyticsOverview,
+  useAssignCourier,
+  useUpdateOrderStatus,
+  useUpdateReturn,
+  useAddOrderTag,
+  useDeleteOrderTag
+} from "@/features/admin/hooks/useAdminOrders";
 
 /* ════════════════════════════════════════════
    DESIGN TOKENS
@@ -142,6 +157,56 @@ const GLOBAL_CSS = `
   .ao-note-btn { background:none; border:none; cursor:pointer; font-size:11px; color:#768390; padding:2px 6px; border-radius:4px; }
   .ao-note-btn:hover { background:#22272e; color:#cdd9e5; }
 
+  /* ── order detail layout ── */
+  .ao-detail-body {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+  }
+  .ao-detail-left {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    padding: 20px;
+  }
+  .ao-detail-right {
+    width: 320px;
+    min-height: 0;
+    flex-shrink: 0;
+    border-left: 1px solid #444c56;
+    overflow-y: auto;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    /* ensure height is constrained by parent so overflow-y:auto actually kicks in */
+    min-height: 0;
+  }
+
+  @media (max-width: 900px) {
+    .ao-detail-right {
+      width: 280px;
+    }
+  }
+
+  @media (max-width: 768px) {
+    .ao-detail-body {
+      flex-direction: column !important;
+      overflow-y: auto !important;
+    }
+    .ao-detail-left {
+      overflow-y: visible !important;
+      flex: none !important;
+    }
+    .ao-detail-right {
+      width: 100% !important;
+      border-left: none !important;
+      border-top: 1px solid #444c56 !important;
+      overflow-y: visible !important;
+      flex: none !important;
+    }
+  }
+
   @media (prefers-reduced-motion:reduce) {
     *, *::before, *::after { animation-duration:0.01ms !important; transition-duration:0.01ms !important; }
   }
@@ -152,37 +217,73 @@ const GLOBAL_CSS = `
 ════════════════════════════════════════════ */
 type PaymentStatus = "Paid" | "Pending" | "Failed" | "COD Pending" | "Refunded";
 type FulfilmentStatus =
-  | "Unfulfilled" | "Shipped" | "Out for Delivery"
+  | "Unfulfilled" | "Partially fulfilled" | "Shipped" | "Out for Delivery"
   | "Delivered" | "Cancelled" | "Return Requested" | "Return Received";
 
 interface Order {
-  id: string; customer: string; email: string; phone: string; avatar: string;
+  id: string; uuid: string; customer: string; email: string; phone: string; avatar: string;
   items: number; total: string; totalNum: number;
   payment: PaymentStatus; fulfilment: FulfilmentStatus;
   courier: string; city: string; state: string;
   date: string; dateRaw: Date; tags: string[]; riskScore: number;
 }
 
-/* ════════════════════════════════════════════
-   MOCK DATA
-════════════════════════════════════════════ */
-const ORDERS: Order[] = [
-  { id:"ORD-4831", customer:"Priya Kumar",   email:"priya@email.com",  phone:"+91 98765 43210", avatar:"PK", items:3, total:"₹1,248", totalNum:1248, payment:"Paid",        fulfilment:"Delivered",        courier:"Shiprocket", city:"Mumbai",    state:"MH", date:"15 Jun 2026", dateRaw:new Date(2026,5,15,10,24), tags:["VIP","Gift"],         riskScore:12 },
-  { id:"ORD-4830", customer:"Rahul Mehta",   email:"rahul@email.com",  phone:"+91 99123 45678", avatar:"RM", items:2, total:"₹2,149", totalNum:2149, payment:"Paid",        fulfilment:"Shipped",          courier:"Delhivery",  city:"Delhi",     state:"DL", date:"15 Jun 2026", dateRaw:new Date(2026,5,15,9,10),  tags:["First Order"],        riskScore:8  },
-  { id:"ORD-4829", customer:"Neha Khatri",   email:"neha@email.com",   phone:"+91 91234 56789", avatar:"NK", items:1, total:"₹599",   totalNum:599,  payment:"COD Pending", fulfilment:"Out for Delivery", courier:"Bluedart",   city:"Pune",      state:"MH", date:"14 Jun 2026", dateRaw:new Date(2026,5,14,14,30), tags:["COD"],                riskScore:35 },
-  { id:"ORD-4828", customer:"Aditya Patel",  email:"aditya@email.com", phone:"+91 87654 32109", avatar:"AP", items:4, total:"₹3,799", totalNum:3799, payment:"Paid",        fulfilment:"Unfulfilled",      courier:"—",          city:"Bangalore", state:"KA", date:"14 Jun 2026", dateRaw:new Date(2026,5,14,11,5),  tags:[],                     riskScore:15 },
-  { id:"ORD-4827", customer:"Sunita Rao",    email:"sunita@email.com", phone:"+91 76543 21098", avatar:"SR", items:1, total:"₹899",   totalNum:899,  payment:"Refunded",    fulfilment:"Return Requested", courier:"Shiprocket", city:"Hyderabad", state:"TS", date:"13 Jun 2026", dateRaw:new Date(2026,5,13,16,45), tags:["VIP"],                riskScore:20 },
-  { id:"ORD-4826", customer:"Vikram Desai",  email:"vikram@email.com", phone:"+91 65432 10987", avatar:"VD", items:2, total:"₹1,450", totalNum:1450, payment:"Paid",        fulfilment:"Delivered",        courier:"DTDC",       city:"Ahmedabad", state:"GJ", date:"12 Jun 2026", dateRaw:new Date(2026,5,12,9,30),  tags:[],                     riskScore:5  },
-  { id:"ORD-4825", customer:"Asha Tiwari",   email:"asha@email.com",   phone:"+91 54321 09876", avatar:"AT", items:5, total:"₹4,250", totalNum:4250, payment:"Pending",     fulfilment:"Unfulfilled",      courier:"—",          city:"Chennai",   state:"TN", date:"12 Jun 2026", dateRaw:new Date(2026,5,12,8,15),  tags:["VIP"],                riskScore:72 },
-  { id:"ORD-4824", customer:"Kiran Bose",    email:"kiran@email.com",  phone:"+91 43210 98765", avatar:"KB", items:1, total:"₹349",   totalNum:349,  payment:"Paid",        fulfilment:"Delivered",        courier:"Self-ship",  city:"Kolkata",   state:"WB", date:"11 Jun 2026", dateRaw:new Date(2026,5,11,12,0),  tags:["First Order"],        riskScore:10 },
-  { id:"ORD-4823", customer:"Meena Gupta",   email:"meena@email.com",  phone:"+91 32109 87654", avatar:"MG", items:2, total:"₹780",   totalNum:780,  payment:"Failed",      fulfilment:"Cancelled",        courier:"—",          city:"Jaipur",    state:"RJ", date:"11 Jun 2026", dateRaw:new Date(2026,5,11,10,20), tags:[],                     riskScore:60 },
-  { id:"ORD-4822", customer:"Arjun Shah",    email:"arjun@email.com",  phone:"+91 21098 76543", avatar:"AS", items:3, total:"₹2,699", totalNum:2699, payment:"Paid",        fulfilment:"Shipped",          courier:"Delhivery",  city:"Surat",     state:"GJ", date:"10 Jun 2026", dateRaw:new Date(2026,5,10,15,45), tags:["Gift"],               riskScore:18 },
-  { id:"ORD-4821", customer:"Divya Nair",    email:"divya@email.com",  phone:"+91 10987 65432", avatar:"DN", items:1, total:"₹1,099", totalNum:1099, payment:"Paid",        fulfilment:"Return Received",  courier:"Bluedart",   city:"Kochi",     state:"KL", date:"09 Jun 2026", dateRaw:new Date(2026,5,9,14,0),   tags:["VIP"],                riskScore:25 },
-  { id:"ORD-4820", customer:"Rohit Kumar",   email:"rohit@email.com",  phone:"+91 98001 23456", avatar:"RK", items:6, total:"₹5,499", totalNum:5499, payment:"Paid",        fulfilment:"Delivered",        courier:"Shiprocket", city:"Lucknow",   state:"UP", date:"08 Jun 2026", dateRaw:new Date(2026,5,8,11,30),  tags:["VIP","First Order"],  riskScore:9  },
-  { id:"ORD-4819", customer:"Fatima Sheikh", email:"fatima@email.com", phone:"+91 97002 34567", avatar:"FS", items:2, total:"₹1,299", totalNum:1299, payment:"COD Pending", fulfilment:"Out for Delivery", courier:"DTDC",       city:"Mumbai",    state:"MH", date:"08 Jun 2026", dateRaw:new Date(2026,5,8,9,0),    tags:["COD"],                riskScore:40 },
-  { id:"ORD-4818", customer:"Suresh Kumar",  email:"suresh@email.com", phone:"+91 96003 45678", avatar:"SK", items:1, total:"₹449",   totalNum:449,  payment:"Paid",        fulfilment:"Delivered",        courier:"Shiprocket", city:"Nagpur",    state:"MH", date:"07 Jun 2026", dateRaw:new Date(2026,5,7,14,20),  tags:[],                     riskScore:7  },
-  { id:"ORD-4817", customer:"Ananya Das",    email:"ananya@email.com", phone:"+91 95004 56789", avatar:"AD", items:3, total:"₹2,099", totalNum:2099, payment:"Paid",        fulfilment:"Delivered",        courier:"Delhivery",  city:"Bhopal",    state:"MP", date:"06 Jun 2026", dateRaw:new Date(2026,5,6,10,15),  tags:["Gift"],               riskScore:13 },
-];
+function mapPaymentStatus(status: string): PaymentStatus {
+  switch (status) {
+    case "paid": return "Paid";
+    case "pending": return "Pending";
+    case "failed": return "Failed";
+    case "cod_pending": return "COD Pending";
+    case "refunded": return "Refunded";
+    case "partially_refunded": return "Refunded";
+    default: return "Pending";
+  }
+}
+
+function mapFulfilmentStatus(status: string, orderStatus?: string): FulfilmentStatus {
+  const normalizedOrderStatus = (orderStatus || "").toLowerCase();
+
+  if (["cancelled", "cancelled_by_customer", "cancelled_by_admin"].includes(normalizedOrderStatus)) return "Cancelled";
+  if (["return_requested", "return_approved", "return_pickup_scheduled"].includes(normalizedOrderStatus)) return "Return Requested";
+  if (["return_received", "return_inspection", "return_completed", "return_rejected"].includes(normalizedOrderStatus)) return "Return Received";
+  if (normalizedOrderStatus === "out_for_delivery") return "Out for Delivery";
+  if (["dispatched", "in_transit", "picked_up", "shipped"].includes(normalizedOrderStatus)) return "Shipped";
+  if (["delivered", "completed"].includes(normalizedOrderStatus)) return "Delivered";
+
+  switch (status) {
+    case "unfulfilled": return "Unfulfilled";
+    case "partially_fulfilled": return "Partially fulfilled";
+    case "fulfilled": return "Delivered";
+    case "returned": return "Return Received";
+    default: return "Unfulfilled";
+  }
+}
+
+function frontendStatusToDb(status: string): string | undefined {
+  switch (status) {
+    case "Unfulfilled": return "processing";
+    case "Shipped": return "dispatched";
+    case "Out for Delivery": return "out_for_delivery";
+    case "Delivered": return "delivered";
+    case "Cancelled": return "cancelled";
+    case "Return Requested": return "return_requested";
+    case "Return Received": return "return_received";
+    default: return undefined;
+  }
+}
+
+function frontendPaymentStatusToDb(status: string): string | undefined {
+  switch (status) {
+    case "Paid": return "paid";
+    case "Pending": return "pending";
+    case "Failed": return "failed";
+    case "COD Pending": return "cod_pending";
+    case "Refunded": return "refunded";
+    default: return undefined;
+  }
+}
+
+
 
 const PAYMENT_STYLE: Record<PaymentStatus, { bg:string; color:string }> = {
   "Paid":        { bg: T.deliveredBg,  color: T.delivered  },
@@ -193,6 +294,7 @@ const PAYMENT_STYLE: Record<PaymentStatus, { bg:string; color:string }> = {
 };
 const FULFILMENT_STYLE: Record<FulfilmentStatus, { bg:string; color:string }> = {
   "Unfulfilled":      { bg: T.processingBg, color: T.processing },
+  "Partially fulfilled": { bg: T.attemptedBg, color: T.attempted },
   "Shipped":          { bg: T.shippedBg,    color: T.shipped    },
   "Out for Delivery": { bg: T.shippedBg,    color: T.shipped    },
   "Delivered":        { bg: T.deliveredBg,  color: T.delivered  },
@@ -207,6 +309,62 @@ const STATUS_TABS: { key:TabKey; label:string }[] = [
   { key:"Shipped", label:"Shipped" }, { key:"Delivered", label:"Delivered" },
   { key:"Cancelled", label:"Cancelled" }, { key:"Returned", label:"Returned" },
 ];
+
+const WORKFLOW_STATUS_LABELS: Record<string, string> = {
+  payment_pending: "PAYMENT_PENDING", payment_verified: "PAYMENT_VERIFIED", payment_confirmed: "PAYMENT_VERIFIED",
+  payment_failed: "PAYMENT_FAILED", cod_eligibility_verified: "VERIFY_COD_ELIGIBILITY",
+  cod_amount_collected: "COD_AMOUNT_COLLECTED",
+  order_accepted: "ORDER_ACCEPTED", order_confirmed: "ORDER_ACCEPTED", inventory_reserved: "INVENTORY_RESERVED",
+  picking: "PICKING", quality_check: "QUALITY_CHECK", packed: "PACKED",
+  ready_for_dispatch: "READY_FOR_DISPATCH", courier_assigned: "COURIER_ASSIGNED",
+  picked_up: "PICKED_UP", shipped: "SHIPPED", in_transit: "IN_TRANSIT",
+  out_for_delivery: "OUT_FOR_DELIVERY", delivered: "DELIVERED", completed: "COMPLETED",
+  cancelled_by_admin: "CANCELLED_BY_ADMIN", refund_pending: "REFUND_PENDING",
+  refunded: "REFUNDED", return_requested: "RETURN_REQUESTED",
+  return_approved: "RETURN_APPROVED", return_pickup_scheduled: "RETURN_PICKUP_SCHEDULED",
+  return_received: "RETURN_RECEIVED", return_inspection: "RETURN_INSPECTION",
+  return_rejected: "RETURN_REJECTED", return_completed: "RETURN_COMPLETED",
+};
+
+function recommendedWorkflowStatuses(currentStatus: string, paymentStatus: string, paymentGateway?: string | null): string[] {
+  const paid = ["paid", "partially_paid"].includes(paymentStatus);
+  const isCod = paymentGateway === "cod";
+  const normal: Record<string, string[]> = {
+    new_order: ["payment_pending"],
+    order_placed: ["payment_pending"],
+    payment_pending: isCod ? ["cod_eligibility_verified"] : [],
+    cod_eligibility_verified: ["order_accepted"],
+    payment_verified: ["order_accepted"],
+    payment_confirmed: ["order_accepted"],
+    order_accepted: ["inventory_reserved"],
+    order_confirmed: ["inventory_reserved"],
+    inventory_reserved: ["picking"],
+    picking: ["quality_check"],
+    quality_check: ["packed"],
+    processing: ["packed"],
+    packed: ["ready_for_dispatch"],
+    ready_for_dispatch: ["courier_assigned"],
+    courier_assigned: ["picked_up"],
+    picked_up: ["shipped"],
+    dispatched: ["in_transit"],
+    shipped: ["in_transit"],
+    in_transit: ["out_for_delivery"],
+    out_for_delivery: isCod ? ["cod_amount_collected"] : ["delivered"],
+    cod_amount_collected: ["delivered"],
+    delivered: ["completed", "return_requested"],
+    return_requested: ["return_approved", "return_rejected"],
+    return_approved: ["return_pickup_scheduled"],
+    return_pickup_scheduled: ["return_received"],
+    return_received: ["return_inspection"],
+    return_inspection: ["return_completed", "refund_pending", "return_rejected"],
+    return_completed: ["refund_pending"],
+    refund_pending: ["refunded"],
+  };
+  if (currentStatus === "cancelled_by_customer" || currentStatus === "cancelled_by_admin" || currentStatus === "cancelled") {
+    return paid ? ["refund_pending"] : [];
+  }
+  return normal[currentStatus] ?? [];
+}
 
 /* ════════════════════════════════════════════
    SMALL REUSABLE COMPONENTS
@@ -308,8 +466,40 @@ function KpiCard({ label, value, delta, deltaType, sparkData, accentColor, onCli
 /* ════════════════════════════════════════════
    OVERFLOW MENU
 ════════════════════════════════════════════ */
-function OverflowMenu({ orderId, onAction }: { orderId:string; onAction:(label:string)=>void }) {
+function OverflowMenu({ orderId, triggerId, onAction }: { orderId:string; triggerId:string; onAction:(label:string)=>void }) {
   const menuRef = useRef<HTMLDivElement>(null);
+  const [coords, setCoords] = useState<{ top: number; left: number } | null>(null);
+
+  useEffect(() => {
+    const trigger = document.getElementById(triggerId);
+    if (!trigger) return;
+    const rect = trigger.getBoundingClientRect();
+    const menuHeight = 360; // approximate menu height
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const openUpward = spaceBelow < menuHeight && rect.top > menuHeight;
+    
+    setCoords({
+      top: openUpward ? rect.top - menuHeight : rect.bottom + 4,
+      left: rect.right - 200,
+    });
+  }, [triggerId]);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        onAction("");
+      }
+    };
+    const handleScroll = () => {
+      onAction("");
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    window.addEventListener("scroll", handleScroll, true);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      window.removeEventListener("scroll", handleScroll, true);
+    };
+  }, [onAction]);
 
   // Items list
   const ITEMS = [
@@ -317,7 +507,7 @@ function OverflowMenu({ orderId, onAction }: { orderId:string; onAction:(label:s
     { label:"Edit Order",         icon:"✏️" },
     { label:"Print Invoice",      icon:"🖨" },
     { label:"Print Packing Slip", icon:"📄" },
-    { label:"Mark as Fulfilled",  icon:"✅" },
+    { label:"Shipment Details",   icon:"🚚" },
     { label:"Add Tracking Number",icon:"📦" },
     { label:"Assign Courier",     icon:"🚚" },
     null,
@@ -327,10 +517,12 @@ function OverflowMenu({ orderId, onAction }: { orderId:string; onAction:(label:s
     { label:"Add Tag",            icon:"🏷" },
   ];
 
+  if (!coords) return null;
+
   return (
-    <div ref={menuRef} role="menu" style={{ position:"absolute", right:0, top:"100%",
-      marginTop:"4px", background:T.overlayBg, border:`1px solid ${T.border}`,
-      borderRadius:"8px", width:"200px", zIndex:200, boxShadow:"0 8px 24px rgba(0,0,0,0.5)",
+    <div ref={menuRef} role="menu" style={{ position:"fixed", left:`${coords.left}px`, top:`${coords.top}px`,
+      background:T.overlayBg, border:`1px solid ${T.border}`,
+      borderRadius:"8px", width:"200px", zIndex:9999, boxShadow:"0 8px 24px rgba(0,0,0,0.5)",
       overflow:"hidden" }}>
       {ITEMS.map((item, i) =>
         item === null
@@ -437,30 +629,81 @@ function FilterDrawer({ open, onClose, filters, setFilters }: {
 /* ════════════════════════════════════════════
    ORDER DETAIL PANEL (slide-in from right)
 ════════════════════════════════════════════ */
-function OrderDetailPanel({ order, onClose, onToast }: {
-  order:Order; onClose:()=>void; onToast:(msg:string)=>void;
+function OrderDetailPanel({
+  orderSummary,
+  onClose,
+  onToast,
+  initialTab = "timeline",
+  initialCancelOpen = false,
+  initialRefundOpen = false,
+  initialAssignCourierOpen = false,
+  initialAddTagOpen = false,
+}: {
+  orderSummary: Order;
+  onClose: () => void;
+  onToast: (msg: string) => void;
+  initialTab?: "timeline" | "items" | "fulfil" | "notes";
+  initialCancelOpen?: boolean;
+  initialRefundOpen?: boolean;
+  initialAssignCourierOpen?: boolean;
+  initialAddTagOpen?: boolean;
 }) {
-  const [tab, setTab] = useState<"timeline"|"items"|"fulfil"|"notes">("timeline");
+  const { data: order, isLoading, isError } = useAdminOrder(orderSummary.uuid);
+  const [tab, setTab] = useState<"timeline" | "items" | "fulfil" | "notes">(initialTab);
   const [noteText, setNoteText] = useState("");
-  const [notes, setNotes] = useState([
-    { id:1, initials:"RK", author:"Ravi K.",   time:"15 Jun, 11:05 AM", text:"Customer requested gift wrapping. See packing note." },
-    { id:2, initials:"SK", author:"Suresh K.", time:"15 Jun, 10:30 AM", text:"Payment confirmed via Razorpay ref: RZP-28291." },
-  ]);
   const [tracking, setTracking] = useState("");
   const [carrier, setCarrier]   = useState("Shiprocket");
-  const [notifyEmail, setNotifyEmail] = useState(true);
-  const [notifySms, setNotifySms]     = useState(true);
 
-  const fSt = FULFILMENT_STYLE[order.fulfilment];
-  const pSt = PAYMENT_STYLE[order.payment];
+  // refund state
+  const [refundOpen, setRefundOpen] = useState(initialRefundOpen);
+  const [refundAmount, setRefundAmount] = useState("");
+  const [refundReason, setRefundReason] = useState("");
 
-  const timeline = [
-    { stage:"Order Placed",    time:"15 Jun, 10:24 AM", loc:"Mumbai",          done:true,  active:false },
-    { stage:"Being Packed",    time:"15 Jun, 02:48 PM", loc:"Pune FC",          done:true,  active:false },
-    { stage:"Dispatched",      time:"16 Jun, 09:00 AM", loc:"Shiprocket",       done:true,  active:false },
-    { stage:"Out for Delivery",time:"17 Jun, 08:45 AM", loc:"Mumbai – Andheri", done:false, active:true  },
-    { stage:"Delivered",       time:"—",                loc:"—",                done:false, active:false },
-  ];
+  // cancel state
+  const [cancelOpen, setCancelOpen] = useState(initialCancelOpen);
+  const [cancelReason, setCancelReason] = useState("");
+
+  const [isAssigning, setIsAssigning] = useState(initialAssignCourierOpen);
+  const [courierInput, setCourierInput] = useState("");
+  const [isAddingTag, setIsAddingTag] = useState(initialAddTagOpen);
+  const [tagInput, setTagInput] = useState("");
+  const [nextStatus, setNextStatus] = useState("");
+  const [returnNote, setReturnNote] = useState("");
+
+  // Sync with initial props when they change
+  useEffect(() => {
+    setTab(initialTab);
+  }, [initialTab]);
+
+  useEffect(() => {
+    setCancelOpen(initialCancelOpen);
+  }, [initialCancelOpen]);
+
+  useEffect(() => {
+    setRefundOpen(initialRefundOpen);
+  }, [initialRefundOpen]);
+
+  useEffect(() => {
+    setIsAssigning(initialAssignCourierOpen);
+    if (initialAssignCourierOpen && order) {
+      setCourierInput(order.shipping_carrier || "Shiprocket");
+    }
+  }, [initialAssignCourierOpen, order]);
+
+  useEffect(() => {
+    setIsAddingTag(initialAddTagOpen);
+  }, [initialAddTagOpen]);
+
+  const trackingMutation = useUpdateOrderTracking(orderSummary.uuid);
+  const cancelMutation = useCancelOrder(orderSummary.uuid);
+  const refundMutation = useRefundOrder(orderSummary.uuid);
+  const addNoteMutation = useAddOrderNote(orderSummary.uuid);
+  const deleteNoteMutation = useDeleteOrderNote(orderSummary.uuid);
+  const assignCourierMutation = useAssignCourier(orderSummary.uuid);
+  const statusMutation = useUpdateOrderStatus(orderSummary.uuid);
+  const returnMutation = useUpdateReturn(orderSummary.uuid);
+  const addTagMutation = useAddOrderTag(orderSummary.uuid);
+  const deleteTagMutation = useDeleteOrderTag(orderSummary.uuid);
 
   useEffect(() => {
     const h = (e:KeyboardEvent) => { if (e.key==="Escape") onClose(); };
@@ -468,23 +711,168 @@ function OrderDetailPanel({ order, onClose, onToast }: {
     return () => document.removeEventListener("keydown", h);
   }, [onClose]);
 
-  const addNote = () => {
-    if (!noteText.trim()) return;
-    setNotes([{ id:Date.now(), initials:"YO", author:"You", time:"Just now", text:noteText.trim() }, ...notes]);
-    setNoteText("");
-    onToast("Note saved.");
+  // Set default tracking details from order if already set
+  useEffect(() => {
+    if (order) {
+      if (order.tracking_number) setTracking(order.tracking_number);
+      if (order.shipping_carrier) setCarrier(order.shipping_carrier);
+    }
+  }, [order]);
+
+  if (isLoading) {
+    return (
+      <>
+        <div onClick={onClose} style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.55)", zIndex:400 }} />
+        <div style={{
+          position:"fixed", top:0, right:0, height:"100vh", width:"min(900px,95vw)",
+          background:T.pageBg, borderLeft:`1px solid ${T.border}`, zIndex:401,
+          display:"flex", alignItems:"center", justifyContent:"center", color:T.text
+        }}>
+          <div>Loading order details...</div>
+        </div>
+      </>
+    );
+  }
+
+  if (isError || !order) {
+    return (
+      <>
+        <div onClick={onClose} style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.55)", zIndex:400 }} />
+        <div style={{
+          position:"fixed", top:0, right:0, height:"100vh", width:"min(900px,95vw)",
+          background:T.pageBg, borderLeft:`1px solid ${T.border}`, zIndex:401,
+          display:"flex", alignItems:"center", justifyContent:"center", color:T.cancelled
+        }}>
+          <div>Error loading order details.</div>
+        </div>
+      </>
+    );
+  }
+
+  const fSt = FULFILMENT_STYLE[mapFulfilmentStatus(order.fulfillment_status, order.status)];
+  const pSt = PAYMENT_STYLE[mapPaymentStatus(order.payment_status)];
+  const recommendedStatuses = recommendedWorkflowStatuses(order.status, order.payment_status, order.payment_gateway);
+  const returnCase = Array.isArray(order.returns) ? order.returns[0] : null;
+  let returnEvidence: string[] = [];
+  try {
+    returnEvidence = returnCase?.evidence_urls ? JSON.parse(returnCase.evidence_urls) : [];
+  } catch {
+    returnEvidence = [];
+  }
+  const returnAction = (action: string, requiresReason = false) => {
+    if (requiresReason && !returnNote.trim()) {
+      onToast("Enter a reason before rejecting this return.");
+      return;
+    }
+    returnMutation.mutate(
+      { action, adminNote: returnNote.trim() || undefined },
+      {
+        onSuccess: () => {
+          setReturnNote("");
+          onToast("Return case updated.");
+        },
+        onError: (err: any) => onToast(err.response?.data?.detail || "Could not update return case.")
+      }
+    );
   };
 
-  const handleFulfil = () => {
-    onToast(`Order #${order.id} marked as fulfilled.`);
-    onClose();
+  const timeline: Array<{ stage: string; description?: string; time: string; loc: string; done: boolean; active: boolean }> = (order.status_history || []).map((h: any) => ({
+    stage: h.status.replace(/_/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase()),
+    description: h.description || undefined,
+    time: new Date(h.created_at).toLocaleString("en-IN", { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', hour12: true }),
+    loc: h.location || "System",
+    done: true,
+    active: false
+  }));
+
+  if (timeline.length === 0) {
+    timeline.push({
+      stage: "Order Placed",
+      time: new Date(order.created_at).toLocaleString("en-IN", { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', hour12: true }),
+      loc: "System",
+      done: true,
+      active: true
+    });
+  }
+
+  const addNote = () => {
+    if (!noteText.trim()) return;
+    addNoteMutation.mutate(
+      { note: noteText.trim(), isInternal: true },
+      {
+        onSuccess: () => {
+          setNoteText("");
+          onToast("Note saved.");
+        },
+        onError: () => {
+          onToast("Failed to save note.");
+        }
+      }
+    );
+  };
+
+  const saveShipmentDetails = () => {
+    if (!tracking.trim() || !carrier.trim()) {
+      onToast("Enter both a carrier and tracking number.");
+      return;
+    }
+    trackingMutation.mutate(
+      { carrier, trackingNumber: tracking.trim() },
+      {
+        onSuccess: () => {
+          onToast("Shipment details saved. Update the workflow separately when the order ships.");
+        },
+        onError: (err: any) => {
+          onToast(`Failed to save shipment details: ${err.response?.data?.detail || err.message}`);
+        }
+      }
+    );
+  };
+
+  const handleCancel = () => {
+    if (!cancelReason.trim()) return;
+    cancelMutation.mutate(cancelReason.trim(), {
+      onSuccess: () => {
+        onToast(`Order #${order.order_number} cancelled.`);
+        setCancelOpen(false);
+        onClose();
+      },
+      onError: (err: any) => {
+        onToast(`Failed to cancel order: ${err.response?.data?.detail || err.message}`);
+      }
+    });
+  };
+
+  const handleRefund = () => {
+    const amountNum = parseFloat(refundAmount);
+    if (isNaN(amountNum) || amountNum <= 0) {
+      onToast("Please enter a valid amount.");
+      return;
+    }
+    refundMutation.mutate(
+      {
+        amount: amountNum,
+        reason: refundReason.trim(),
+        type: amountNum >= parseFloat(order.total) ? "full" : "partial"
+      },
+      {
+        onSuccess: () => {
+          onToast(`Refund of ₹${amountNum} initiated.`);
+          setRefundOpen(false);
+          onClose();
+        },
+        onError: (err: any) => {
+          onToast(`Failed to initiate refund: ${err.response?.data?.detail || err.message}`);
+        }
+      }
+    );
   };
 
   return (
     <>
       <div onClick={onClose} style={{ position:"fixed", inset:0,
         background:"rgba(0,0,0,0.55)", zIndex:400 }} />
-      <div role="dialog" aria-modal="true" aria-label={`Order ${order.id}`} style={{
+      <div role="dialog" aria-modal="true" aria-label={`Order ${order.order_number}`} style={{
         position:"fixed", top:0, right:0, height:"100vh", width:"min(900px,95vw)",
         background:T.pageBg, borderLeft:`1px solid ${T.border}`,
         zIndex:401, display:"flex", flexDirection:"column", overflow:"hidden",
@@ -496,12 +884,12 @@ function OrderDetailPanel({ order, onClose, onToast }: {
             <div>
               <div style={{ display:"flex", alignItems:"center", gap:"10px", marginBottom:"4px" }}>
                 <h2 style={{ margin:0, fontFamily:"monospace", fontSize:"20px",
-                  fontWeight:700, color:T.text }}>#{order.id}</h2>
-                <Badge bg={fSt.bg} color={fSt.color}>{order.fulfilment}</Badge>
+                  fontWeight:700, color:T.text }}>#{order.order_number}</h2>
+                <Badge bg={fSt.bg} color={fSt.color}>{mapFulfilmentStatus(order.fulfillment_status, order.status)}</Badge>
               </div>
               <div style={{ fontSize:"12px", color:T.textMuted }}>
-                Placed {order.date} ·{" "}
-                <span style={{ color:T.accent }}>{order.customer}</span> · {order.total}
+                Placed {new Date(order.created_at).toLocaleDateString("en-IN", { day: '2-digit', month: 'short', year: 'numeric' })} ·{" "}
+                <span style={{ color:T.accent }}>{orderSummary.customer}</span> · ₹{parseFloat(order.total).toLocaleString("en-IN")}
               </div>
             </div>
             <div style={{ display:"flex", gap:"8px", flexShrink:0 }}>
@@ -522,62 +910,85 @@ function OrderDetailPanel({ order, onClose, onToast }: {
         </div>
 
         {/* ── body ── */}
-        <div style={{ flex:1, overflow:"hidden", display:"flex" }}>
+        <div className="ao-detail-body">
           {/* left */}
-          <div style={{ flex:1, overflowY:"auto", padding:"20px" }}>
+          <div className="ao-detail-left">
 
             {/* TIMELINE */}
             {tab==="timeline" && (
               <div style={{ background:T.cardBg, border:`1px solid ${T.borderMuted}`,
                 borderRadius:"8px", padding:"20px" }}>
                 <div style={{ fontSize:"15px", fontWeight:600, color:T.text, marginBottom:"20px" }}>
-                  Fulfilment Timeline
+                  Order Workflow
                 </div>
-                {/* progress bar */}
-                <div style={{ position:"relative", marginBottom:"20px", padding:"0 8px" }}>
-                  <div style={{ height:"6px", background:T.border, borderRadius:"9999px" }}>
-                    <div style={{ height:"100%", width:"65%", background:T.accent,
-                      borderRadius:"9999px", transition:"width 500ms ease" }} />
-                  </div>
-                  <div style={{ display:"flex", justifyContent:"space-between",
-                    position:"absolute", top:"-8px", left:"8px", right:"8px" }}>
-                    {timeline.map((s,i) => (
-                      <div key={i} style={{
-                        width: s.active?"20px":s.done?"16px":"14px",
-                        height:s.active?"20px":s.done?"16px":"14px",
-                        borderRadius:"50%",
-                        background:s.done||s.active ? T.accent : "transparent",
-                        border:s.done||s.active ? "none" : `2px solid ${T.border}`,
-                        display:"flex", alignItems:"center", justifyContent:"center",
-                        boxShadow:s.active ? `0 0 0 5px ${T.accentBg}` : "none",
-                        transition:"all 300ms",
-                      }}>
-                        {s.done && <span style={{ color:"#fff", fontSize:"8px" }}>✓</span>}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-                {/* stage labels */}
-                <div style={{ display:"flex", justifyContent:"space-between", marginBottom:"20px" }}>
-                  {timeline.map((s,i) => (
-                    <div key={i} style={{ fontSize:"10px", textAlign:"center", flex:1,
-                      color:s.active ? T.accent : T.textMuted }}>
-                      {s.stage}
+                {returnCase && (
+                  <div style={{ marginBottom:"18px", padding:"14px", borderRadius:"7px", border:`1px solid ${T.returned}55`, background:T.returnedBg }}>
+                    <div style={{ display:"flex", justifyContent:"space-between", gap:"12px", alignItems:"center", marginBottom:"10px" }}>
+                      <strong style={{ color:T.text }}>Return case</strong>
+                      <Badge bg={T.returnedBg} color={T.returned}>{returnCase.status.replace(/_/g, " ")}</Badge>
                     </div>
-                  ))}
+                    <div style={{ display:"grid", gridTemplateColumns:"repeat(2, minmax(0, 1fr))", gap:"8px", fontSize:"12px", color:T.text }}>
+                      <div><span style={{ color:T.textMuted }}>Reason: </span>{returnCase.reason.replace(/_/g, " ")}</div>
+                      <div><span style={{ color:T.textMuted }}>Resolution: </span>{returnCase.return_type}</div>
+                    </div>
+                    {returnCase.customer_note && <div style={{ marginTop:"9px", fontSize:"12px", color:T.text }}><span style={{ color:T.textMuted }}>Customer note: </span>{returnCase.customer_note}</div>}
+                    {returnCase.admin_note && <div style={{ marginTop:"6px", fontSize:"12px", color:T.text }}><span style={{ color:T.textMuted }}>Admin note: </span>{returnCase.admin_note}</div>}
+                    {returnCase.items?.length > 0 && <div style={{ marginTop:"9px", fontSize:"12px", color:T.textMuted }}>Items: {returnCase.items.map((item: any) => `${item.order_item?.title || `Item #${item.order_item_id}`} × ${item.quantity}`).join(", ")}</div>}
+                    {returnEvidence.length > 0 && <div style={{ marginTop:"9px", display:"flex", gap:"8px", flexWrap:"wrap" }}>{returnEvidence.map((url, index) => <a key={url + index} href={url} target="_blank" rel="noreferrer" style={{ color:T.accent, fontSize:"12px" }}>View evidence {index + 1}</a>)}</div>}
+                    {!["rejected", "refunded", "completed", "replacement_created"].includes(returnCase.status) && (
+                      <>
+                        <textarea value={returnNote} onChange={e => setReturnNote(e.target.value)} placeholder="Admin note (required when rejecting)" rows={2}
+                          style={{ width:"100%", marginTop:"12px", padding:"8px", resize:"vertical", background:T.inputBg, color:T.text, border:`1px solid ${T.border}`, borderRadius:"5px", fontSize:"12px" }} />
+                        <div style={{ display:"flex", gap:"8px", flexWrap:"wrap", marginTop:"8px" }}>
+                          {returnCase.status === "requested" && <><Btn size="sm" variant="primary" disabled={returnMutation.isPending} onClick={() => returnAction("approve")}>Approve</Btn><Btn size="sm" variant="danger" disabled={returnMutation.isPending} onClick={() => returnAction("reject", true)}>Reject</Btn></>}
+                          {returnCase.status === "approved" && <Btn size="sm" variant="primary" disabled={returnMutation.isPending} onClick={() => returnAction("schedule_pickup")}>Schedule pickup</Btn>}
+                          {returnCase.status === "pickup_scheduled" && <Btn size="sm" variant="primary" disabled={returnMutation.isPending} onClick={() => returnAction("picked_up")}>Mark picked up</Btn>}
+                          {returnCase.status === "picked_up" && <Btn size="sm" variant="primary" disabled={returnMutation.isPending} onClick={() => returnAction("received")}>Mark received</Btn>}
+                          {returnCase.status === "received" && <><Btn size="sm" variant="primary" disabled={returnMutation.isPending} onClick={() => returnAction("inspect_passed")}>QC passed</Btn><Btn size="sm" variant="danger" disabled={returnMutation.isPending} onClick={() => returnAction("inspect_failed", true)}>QC failed</Btn></>}
+                          {returnCase.status === "inspection" && (returnCase.return_type === "refund" ? <Btn size="sm" variant="primary" disabled={returnMutation.isPending} onClick={() => returnAction("refund")}>Process refund</Btn> : <Btn size="sm" variant="primary" disabled={returnMutation.isPending} onClick={() => returnAction(returnCase.return_type)}>Create {returnCase.return_type}</Btn>)}
+                        </div>
+                      </>
+                    )}
+                  </div>
+                )}
+                <div style={{ display:"flex", gap:"8px", alignItems:"center", marginBottom:"18px", padding:"10px", background:T.inputBg, borderRadius:"6px" }}>
+                  <select aria-label="Update order workflow status" value={nextStatus} onChange={e=>setNextStatus(e.target.value)}
+                    style={{ flex:1, padding:"8px", background:T.cardBg, color:T.text, border:`1px solid ${T.border}`, borderRadius:"5px", fontSize:"12px" }}>
+                    <option value="">Update workflow status…</option>
+                    {recommendedStatuses.map(status => <option key={status} value={status}>{WORKFLOW_STATUS_LABELS[status]}</option>)}
+                  </select>
+                  <Btn size="sm" variant="primary" disabled={!nextStatus || statusMutation.isPending} onClick={() => {
+                    if (nextStatus === "shipped" && (!order.shipping_carrier || !order.tracking_number)) {
+                      onToast("Save carrier and tracking number in Shipment Details before marking this order as shipped.");
+                      return;
+                    }
+                    statusMutation.mutate(
+                      { status: nextStatus },
+                      { onSuccess: () => { onToast(`Status updated to ${nextStatus.replace(/_/g, " ")}.`); setNextStatus(""); }, onError: (err: any) => onToast(err.response?.data?.detail || "Could not update order status.") }
+                    );
+                  }}>
+                    {statusMutation.isPending ? "Updating…" : "Update"}
+                  </Btn>
                 </div>
                 {/* event log */}
                 <div role="list" aria-label="Fulfilment timeline"
                   style={{ display:"flex", flexDirection:"column", gap:"2px" }}>
-                  {timeline.filter(s=>s.done||s.active).map((s,i) => (
-                    <div key={i} role="listitem" aria-current={s.active?"step":undefined}
+                  {timeline.map((s,i) => (
+                    <div key={i} role="listitem"
                       style={{ display:"flex", gap:"12px", padding:"10px 12px",
                         borderRadius:"6px", background:s.active ? T.accentBg : "transparent",
                         borderLeft:s.active ? `3px solid ${T.accent}` : "3px solid transparent" }}>
                       <time style={{ fontSize:"11px", color:T.textMuted,
                         width:"130px", flexShrink:0 }}>{s.time}</time>
                       <span style={{ fontSize:"12px", fontWeight:s.active?600:400,
-                        color:T.text, flex:1 }}>{s.stage}</span>
+                        color:T.text, flex:1 }}>
+                        <div style={{ fontWeight: 600 }}>{s.stage}</div>
+                        {s.description && (
+                          <div style={{ fontSize:"11px", color:T.textMuted, marginTop:"3px" }}>
+                            {s.description}
+                          </div>
+                        )}
+                      </span>
                       <span style={{ fontSize:"11px", color:T.textMuted }}>{s.loc}</span>
                     </div>
                   ))}
@@ -592,50 +1003,50 @@ function OrderDetailPanel({ order, onClose, onToast }: {
                 <div style={{ padding:"14px 18px", borderBottom:`1px solid ${T.borderMuted}`,
                   display:"flex", justifyContent:"space-between", alignItems:"center" }}>
                   <span style={{ fontSize:"15px", fontWeight:600, color:T.text }}>
-                    Items in Order ({order.items})
+                    Items in Order ({order.items?.length || 0})
                   </span>
-                  {order.fulfilment==="Unfulfilled" && (
-                    <Btn variant="secondary" size="sm"
-                      onClick={() => onToast("Add item feature coming soon.")}>
-                      + Add Item
-                    </Btn>
-                  )}
                 </div>
                 <div role="list" aria-label="Order items">
-                  {[
-                    { name:"Monstera Deliciosa", sku:"SKU-MM-001", variant:"Medium · White Minimalist Pot", price:"₹399", qty:1, stockOk:true,  stockMsg:"✓ In stock at Pune FC" },
-                    { name:"Peace Lily — Small",  sku:"SKU-PL-002", variant:"Small",                        price:"₹249", qty:2, stockOk:true,  stockMsg:"✓ In stock" },
-                    { name:"Terracotta Pot 14cm", sku:"SKU-TP-014", variant:"",                             price:"₹299", qty:1, stockOk:false, stockMsg:"⚠ Low stock: 3 remaining" },
-                  ].map((item,i) => (
+                  {(order.items || []).map((item: any, i: number) => (
                     <div key={i} role="listitem"
                       style={{ display:"flex", gap:"14px", padding:"14px 18px",
                         borderBottom:`1px solid ${T.borderMuted}` }}>
                       <div style={{ width:"64px", height:"64px", borderRadius:"4px",
                         background:T.cardHover, border:`1px solid ${T.border}`,
                         display:"flex", alignItems:"center", justifyContent:"center",
-                        fontSize:"24px", flexShrink:0 }}>🌿</div>
+                        fontSize:"24px", flexShrink:0 }}>
+                        {item.image_url ? (
+                          <img src={item.image_url} alt={item.title} style={{ width:"100%", height:"100%", objectFit:"cover", borderRadius:"4px" }} />
+                        ) : (
+                          "🌿"
+                        )}
+                      </div>
                       <div style={{ flex:1 }}>
-                        <div style={{ fontSize:"13px", fontWeight:600, color:T.text }}>{item.name}</div>
+                        <div style={{ fontSize:"13px", fontWeight:600, color:T.text }}>{item.title}</div>
                         <div style={{ fontFamily:"monospace", fontSize:"11px", color:T.textMuted }}>{item.sku}</div>
-                        {item.variant && <div style={{ fontSize:"11px", color:T.textMuted }}>{item.variant}</div>}
-                        <div style={{ fontSize:"11px", color:item.stockOk?T.delivered:T.processing, marginTop:"3px" }}>
-                          {item.stockMsg}
+                        {item.variant_title && <div style={{ fontSize:"11px", color:T.textMuted }}>{item.variant_title}</div>}
+                        <div style={{ fontSize:"11px", color:T.delivered, marginTop:"3px" }}>
+                          ✓ Ready to fulfill
                         </div>
                       </div>
                       <div style={{ textAlign:"right", flexShrink:0 }}>
                         <div style={{ fontSize:"12px", fontWeight:700, color:T.text }}>
-                          {item.price} × {item.qty}
+                          ₹{parseFloat(item.unit_price).toLocaleString("en-IN")} × {item.quantity}
                         </div>
                         <div style={{ fontSize:"11px", color:T.textMuted, marginTop:"2px" }}>
-                          Total: {item.price}
+                          Total: ₹{parseFloat(item.total_price).toLocaleString("en-IN")}
                         </div>
                       </div>
                     </div>
                   ))}
                 </div>
                 <div style={{ padding:"14px 18px", display:"flex", flexDirection:"column", gap:"6px" }}>
-                  {[{l:"Subtotal",v:"₹1,196"},{l:"Discount (HERO10)",v:"−₹120",c:T.delivered},
-                    {l:"Shipping",v:"₹0"},{l:"Tax (GST 18%)",v:"₹172"}].map(r => (
+                  {[
+                    { l: "Subtotal", v: `₹${parseFloat(order.subtotal).toLocaleString("en-IN")}` },
+                    { l: `Discount${order.discount_code ? ` (${order.discount_code})` : ""}`, v: `−₹${parseFloat(order.discount_amount).toLocaleString("en-IN")}`, c: T.delivered },
+                    { l: "Shipping", v: `₹${parseFloat(order.shipping_amount).toLocaleString("en-IN")}` },
+                    { l: "Tax", v: `₹${parseFloat(order.tax_amount).toLocaleString("en-IN")}` }
+                  ].map(r => (
                     <div key={r.l} style={{ display:"flex", justifyContent:"space-between" }}>
                       <span style={{ fontSize:"12px", color:T.textMuted }}>{r.l}</span>
                       <span style={{ fontSize:"12px", fontWeight:600, color:r.c||T.text }}>{r.v}</span>
@@ -644,7 +1055,9 @@ function OrderDetailPanel({ order, onClose, onToast }: {
                   <div style={{ height:"1px", background:T.border, margin:"4px 0" }} />
                   <div style={{ display:"flex", justifyContent:"space-between" }}>
                     <span style={{ fontSize:"15px", fontWeight:700, color:T.text }}>Total</span>
-                    <span style={{ fontSize:"15px", fontWeight:800, color:T.text }}>₹1,248</span>
+                    <span style={{ fontSize:"15px", fontWeight:800, color:T.text }}>
+                      ₹{parseFloat(order.total).toLocaleString("en-IN")}
+                    </span>
                   </div>
                 </div>
               </div>
@@ -656,8 +1069,8 @@ function OrderDetailPanel({ order, onClose, onToast }: {
                 borderRadius:"8px", padding:"20px" }}>
                 <div style={{ display:"flex", justifyContent:"space-between",
                   alignItems:"center", marginBottom:"18px" }}>
-                  <span style={{ fontSize:"15px", fontWeight:600, color:T.text }}>Fulfilment Actions</span>
-                  <Badge bg={fSt.bg} color={fSt.color}>{order.fulfilment}</Badge>
+                  <span style={{ fontSize:"15px", fontWeight:600, color:T.text }}>Shipment Details</span>
+                  <Badge bg={fSt.bg} color={fSt.color}>{mapFulfilmentStatus(order.fulfillment_status, order.status)}</Badge>
                 </div>
                 <div style={{ display:"flex", flexDirection:"column", gap:"14px" }}>
                   <div>
@@ -685,28 +1098,9 @@ function OrderDetailPanel({ order, onClose, onToast }: {
                       ))}
                     </select>
                   </div>
-                  <div style={{ display:"flex", flexDirection:"column", gap:"8px" }}>
-                    <label style={{ display:"flex", alignItems:"center", gap:"8px",
-                      fontSize:"12px", color:T.text, cursor:"pointer" }}>
-                      <input type="checkbox" checked={notifyEmail}
-                        onChange={e=>setNotifyEmail(e.target.checked)}
-                        style={{ accentColor:T.accent }} />
-                      Send shipment email to {order.email}
-                    </label>
-                    <label style={{ display:"flex", alignItems:"center", gap:"8px",
-                      fontSize:"12px", color:T.text, cursor:"pointer" }}>
-                      <input type="checkbox" checked={notifySms}
-                        onChange={e=>setNotifySms(e.target.checked)}
-                        style={{ accentColor:T.accent }} />
-                      Send SMS to {order.phone}
-                    </label>
-                  </div>
                   <div style={{ display:"flex", gap:"10px", paddingTop:"4px" }}>
-                    <Btn variant="secondary" onClick={() => onToast("Draft saved.")}>
-                      Save Draft
-                    </Btn>
-                    <Btn variant="primary" fullWidth onClick={handleFulfil}>
-                      ✓ Mark as Fulfilled + Notify Customer
+                    <Btn variant="primary" fullWidth disabled={trackingMutation.isPending} onClick={saveShipmentDetails}>
+                      {trackingMutation.isPending ? "Saving..." : "Save Shipment Details"}
                     </Btn>
                   </div>
                 </div>
@@ -723,24 +1117,40 @@ function OrderDetailPanel({ order, onClose, onToast }: {
                 </div>
                 <div role="log" aria-label="Admin notes"
                   style={{ padding:"16px 18px", display:"flex", flexDirection:"column", gap:"14px" }}>
-                  {notes.map(n => (
-                    <div key={n.id} style={{ display:"flex", gap:"10px" }}>
-                      <Avatar initials={n.initials} size={28} />
-                      <div style={{ flex:1 }}>
-                        <div style={{ display:"flex", justifyContent:"space-between",
-                          alignItems:"center", marginBottom:"4px" }}>
-                          <span style={{ fontSize:"11px", color:T.textMuted }}>
-                            {n.author} · {n.time}
-                          </span>
-                          <span style={{ fontSize:"10px", background:T.accentBg, color:T.accent,
-                            padding:"1px 6px", borderRadius:"9999px" }}>Internal</span>
+                  {(order.notes_list || []).map((n: any) => {
+                    const initials = n.admin ? `${n.admin.first_name[0]}${n.admin.last_name[0]}`.toUpperCase() : "AD";
+                    const author = n.admin ? `${n.admin.first_name} ${n.admin.last_name}` : "Admin";
+                    const time = new Date(n.created_at).toLocaleString("en-IN", { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', hour12: true });
+                    return (
+                      <div key={n.id} style={{ display:"flex", gap:"10px" }}>
+                        <Avatar initials={initials} size={28} />
+                        <div style={{ flex:1 }}>
+                          <div style={{ display:"flex", justifyContent:"space-between",
+                            alignItems:"center", marginBottom:"4px" }}>
+                            <span style={{ fontSize:"11px", color:T.textMuted }}>
+                              {author} · {time}
+                            </span>
+                            <div style={{ display:"flex", gap:"8px", alignItems:"center" }}>
+                              <span style={{ fontSize:"10px", background:T.accentBg, color:T.accent,
+                                padding:"1px 6px", borderRadius:"9999px" }}>{n.is_internal ? "Internal" : "Public"}</span>
+                              <button
+                                onClick={() => deleteNoteMutation.mutate(String(n.id), {
+                                  onSuccess: () => onToast("Note deleted.")
+                                })}
+                                disabled={deleteNoteMutation.isPending}
+                                style={{ background:"none", border:"none", color:T.cancelled, cursor:"pointer", fontSize:"10px" }}
+                              >
+                                Delete
+                              </button>
+                            </div>
+                          </div>
+                          <p style={{ margin:0, fontSize:"12px", color:T.text, lineHeight:1.6 }}>
+                            {n.note}
+                          </p>
                         </div>
-                        <p style={{ margin:0, fontSize:"12px", color:T.text, lineHeight:1.6 }}>
-                          {n.text}
-                        </p>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                   {/* add note */}
                   <div style={{ borderTop:`1px solid ${T.borderMuted}`, paddingTop:"14px" }}>
                     <label style={{ display:"block", fontSize:"11px", fontWeight:700, color:T.textLabel,
@@ -752,8 +1162,8 @@ function OrderDetailPanel({ order, onClose, onToast }: {
                       style={{ width:"100%", padding:"9px 12px", background:T.inputBg,
                         border:`1px solid ${T.border}`, borderRadius:"6px", color:T.text,
                         fontSize:"12px", resize:"vertical", outline:"none", marginBottom:"10px" }} />
-                    <Btn variant="secondary" disabled={!noteText.trim()} onClick={addNote}>
-                      Save Note
+                    <Btn variant="secondary" disabled={!noteText.trim() || addNoteMutation.isPending} onClick={addNote}>
+                      {addNoteMutation.isPending ? "Saving..." : "Save Note"}
                     </Btn>
                   </div>
                 </div>
@@ -762,13 +1172,16 @@ function OrderDetailPanel({ order, onClose, onToast }: {
           </div>
 
           {/* right sidebar */}
-          <div style={{ width:"260px", flexShrink:0, borderLeft:`1px solid ${T.border}`,
-            overflowY:"auto", padding:"16px", display:"flex", flexDirection:"column", gap:"12px" }}>
+          <div className="ao-detail-right">
 
             {/* Order Summary */}
             <SideCard title="Order Summary">
-              {[{l:"Subtotal",v:"₹1,196"},{l:"Discount (HERO10)",v:"−₹120",c:T.delivered},
-                {l:"Shipping",v:"₹0"},{l:"Tax",v:"₹172"}].map(r=>(
+              {[
+                { l: "Subtotal", v: `₹${parseFloat(order.subtotal).toLocaleString("en-IN")}` },
+                { l: `Discount${order.discount_code ? ` (${order.discount_code})` : ""}`, v: `−₹${parseFloat(order.discount_amount).toLocaleString("en-IN")}`, c: T.delivered },
+                { l: "Shipping", v: `₹${parseFloat(order.shipping_amount).toLocaleString("en-IN")}` },
+                { l: "Tax", v: `₹${parseFloat(order.tax_amount).toLocaleString("en-IN")}` }
+              ].map(r=>(
                 <div key={r.l} style={{ display:"flex", justifyContent:"space-between", fontSize:"11px" }}>
                   <span style={{ color:T.textMuted }}>{r.l}</span>
                   <span style={{ color:r.c||T.text, fontWeight:600 }}>{r.v}</span>
@@ -777,100 +1190,363 @@ function OrderDetailPanel({ order, onClose, onToast }: {
               <div style={{ height:"1px", background:T.border, margin:"6px 0" }} />
               <div style={{ display:"flex", justifyContent:"space-between" }}>
                 <span style={{ fontSize:"13px", fontWeight:700, color:T.text }}>Total</span>
-                <span style={{ fontSize:"13px", fontWeight:800, color:T.text }}>₹1,248</span>
+                <span style={{ fontSize:"13px", fontWeight:800, color:T.text }}>
+                  ₹{parseFloat(order.total).toLocaleString("en-IN")}
+                </span>
               </div>
-              <div style={{ marginTop:"8px", padding:"7px", background:T.deliveredBg,
-                borderRadius:"6px", fontSize:"11px", color:T.delivered }}>
-                ✓ Paid · 15 Jun 2026 · Visa ···· 4821
+              <div style={{ marginTop:"8px", padding:"7px", background: mapPaymentStatus(order.payment_status) === "Paid" ? T.deliveredBg : T.processingBg,
+                borderRadius:"6px", fontSize:"11px", color: mapPaymentStatus(order.payment_status) === "Paid" ? T.delivered : T.processing }}>
+                ✓ {mapPaymentStatus(order.payment_status)} · {new Date(order.created_at).toLocaleDateString("en-IN", { day: '2-digit', month: 'short', year: 'numeric' })} {order.payment_gateway ? `· ${order.payment_gateway}` : ""}
               </div>
             </SideCard>
 
             {/* Customer */}
-            <SideCard title="Customer" action={<Btn variant="ghost" size="xs" onClick={()=>onToast("Opening customer profile…")}>View Profile</Btn>}>
+            <SideCard title="Customer">
               <div style={{ display:"flex", gap:"10px", marginBottom:"10px" }}>
-                <Avatar initials={order.avatar} size={38} />
+                <Avatar initials={orderSummary.avatar} size={38} />
                 <div>
-                  <div style={{ fontSize:"13px", fontWeight:700, color:T.text }}>{order.customer}</div>
-                  <div style={{ fontSize:"11px", color:T.textMuted }}>{order.email}</div>
-                  <div style={{ fontSize:"11px", color:T.textMuted }}>📞 {order.phone}</div>
+                  <div style={{ fontSize:"13px", fontWeight:700, color:T.text }}>{orderSummary.customer}</div>
+                  <div style={{ fontSize:"11px", color:T.textMuted }}>{orderSummary.email}</div>
+                  <div style={{ fontSize:"11px", color:T.textMuted }}>📞 {orderSummary.phone}</div>
                 </div>
-              </div>
-              <div style={{ fontSize:"11px", color:T.accent, marginBottom:"4px" }}>🌿 Plant Lover · Member since Jan 2025</div>
-              <div style={{ fontSize:"11px", color:T.textMuted, marginBottom:"10px" }}>Orders: 12 · Total spent: ₹14,820</div>
-              <div style={{ display:"flex", gap:"6px" }}>
-                <Btn variant="secondary" size="xs" onClick={()=>onToast("Opening email composer…")}>✉ Email</Btn>
-                <Btn variant="secondary" size="xs" onClick={()=>onToast("Opening SMS composer…")}>💬 SMS</Btn>
               </div>
             </SideCard>
 
             {/* Delivery Address */}
-            <SideCard title="Delivery Address"
-              action={<Btn variant="ghost" size="xs" onClick={()=>onToast("Address edit coming soon.")}>✎ Edit</Btn>}>
+            <SideCard title="Delivery Address">
               <div style={{ fontSize:"11px", color:T.text, lineHeight:1.8 }}>
-                🏠 {order.customer}<br/>42, Green Park Society<br/>Baner, Pune — 411045<br/>Maharashtra, India<br/>📞 {order.phone}
+                🏠 {order.shipping_address?.recipient_name || orderSummary.customer}<br/>
+                {order.shipping_address?.line1}<br/>
+                {order.shipping_address?.line2 && <>{order.shipping_address.line2}<br/></>}
+                {order.shipping_address?.city} — {order.shipping_address?.pincode}<br/>
+                {order.shipping_address?.state}, {order.shipping_address?.country || "India"}<br/>
+                📞 {order.shipping_address?.phone || orderSummary.phone}
               </div>
               <div style={{ display:"flex", gap:"6px", marginTop:"8px" }}>
-                <Btn variant="ghost" size="xs" onClick={()=>onToast("Address copied!")}>📋 Copy</Btn>
-                <Btn variant="ghost" size="xs" onClick={()=>window.open("https://maps.google.com","_blank")}>↗ Maps</Btn>
+                <Btn variant="ghost" size="xs" onClick={()=>{
+                  navigator.clipboard.writeText(
+                    `${order.shipping_address?.recipient_name || orderSummary.customer}\n${order.shipping_address?.line1}\n${order.shipping_address?.line2 || ""}\n${order.shipping_address?.city} — ${order.shipping_address?.pincode}\n${order.shipping_address?.state}\nPhone: ${order.shipping_address?.phone || orderSummary.phone}`
+                  );
+                  onToast("Address copied!");
+                }}>📋 Copy</Btn>
+                <Btn variant="ghost" size="xs" onClick={()=>window.open(`https://maps.google.com/?q=${encodeURIComponent(order.shipping_address?.city + ", " + order.shipping_address?.state)}`,"_blank")}>↗ Maps</Btn>
               </div>
             </SideCard>
 
             {/* Payment */}
             <SideCard title="Payment">
-              {[{l:"Amount",v:order.total},{l:"Status",v:order.payment,c:pSt.color},
-                {l:"Method",v:"Visa ···· 4821"},{l:"Gateway",v:"Razorpay"},{l:"Date",v:order.date}]
-                .map(r=>(
+              {[
+                {l:"Amount",v:`₹${parseFloat(order.total).toLocaleString("en-IN")}`},
+                {l:"Status",v:mapPaymentStatus(order.payment_status),c:pSt.color},
+                {l:"Method",v:order.payment_gateway || "Razorpay"},
+                {l:"Gateway",v:"Razorpay"},
+                {l:"Date",v:new Date(order.created_at).toLocaleDateString("en-IN", { day: '2-digit', month: 'short', year: 'numeric' })}
+              ].map(r=>(
                 <div key={r.l} style={{ display:"flex", justifyContent:"space-between", fontSize:"11px", marginBottom:"4px" }}>
                   <span style={{ color:T.textMuted }}>{r.l}</span>
                   <span style={{ color:r.c||T.text, fontWeight:600 }}>{r.v}</span>
                 </div>
               ))}
-              <div style={{ marginTop:"8px" }}>
-                <Btn variant="secondary" size="xs" fullWidth onClick={()=>onToast("Opening refund panel…")}>
-                  💰 Issue Refund
-                </Btn>
-              </div>
+              {order.payment_status === "paid" && (
+                <div style={{ marginTop:"8px" }}>
+                  <Btn variant="secondary" size="xs" fullWidth onClick={()=>setRefundOpen(true)}>
+                    💰 Issue Refund
+                  </Btn>
+                </div>
+              )}
             </SideCard>
 
             {/* Risk */}
             <SideCard title="Risk Assessment"
-              action={<Badge bg={T.deliveredBg} color={T.delivered}>Low Risk 🟢</Badge>}>
-              {[{l:"Fraud score",v:`${order.riskScore}/100`},{l:"IP location",v:`${order.city}, IN`},
-                {l:"AVS match",v:"✓ Full"},{l:"3DS auth",v:"✓ Verified"}].map(r=>(
+              action={<Badge bg={order.risk_score > 50 ? T.cancelledBg : T.deliveredBg} color={order.risk_score > 50 ? T.cancelled : T.delivered}>
+                {order.risk_score > 50 ? "High Risk 🔴" : "Low Risk 🟢"}
+              </Badge>}>
+              {[
+                {l:"Fraud score",v:`${order.risk_score || 0}/100`},
+                {l:"IP location",v:`${orderSummary.city}, IN`},
+                {l:"AVS match",v:"✓ Full"},
+                {l:"3DS auth",v:"✓ Verified"}
+              ].map(r=>(
                 <div key={r.l} style={{ display:"flex", justifyContent:"space-between", fontSize:"11px", marginBottom:"4px" }}>
                   <span style={{ color:T.textMuted }}>{r.l}</span>
                   <span style={{ color:T.text }}>{r.v}</span>
                 </div>
               ))}
-              <div style={{ marginTop:"8px" }}>
-                <Btn variant="danger" size="xs" fullWidth onClick={()=>onToast("Order flagged as suspicious.")}>
-                  ⚑ Flag as Suspicious
-                </Btn>
-              </div>
             </SideCard>
 
             {/* Tags */}
             <SideCard title="Tags">
               <div style={{ display:"flex", flexWrap:"wrap", gap:"6px" }}>
-                {(order.tags.length>0 ? order.tags : []).map(tag=>(
+                {(order.tags && order.tags.length > 0 ? order.tags : []).map((tag: string)=>(
                   <span key={tag} style={{ fontSize:"11px", background:T.cardHover,
                     border:`1px solid ${T.border}`, borderRadius:"9999px",
-                    padding:"2px 10px", color:T.text }}>{tag}</span>
+                    padding:"2px 10px", color:T.text, display:"flex", alignItems:"center", gap:"6px" }}>
+                    {tag}
+                    <button
+                      onClick={() => {
+                        deleteTagMutation.mutate(tag, {
+                          onSuccess: () => onToast(`Tag "${tag}" removed.`),
+                          onError: (err: any) => onToast(`Failed to delete tag: ${err.message}`)
+                        });
+                      }}
+                      disabled={deleteTagMutation.isPending}
+                      style={{ background:"none", border:"none", cursor:"pointer", color:T.cancelled, fontSize:"11px", padding:0, display:"flex", alignItems:"center", justifyContent:"center" }}
+                      aria-label={`Remove tag ${tag}`}
+                    >
+                      ×
+                    </button>
+                  </span>
                 ))}
-                <button onClick={()=>onToast("Tag input coming soon.")}
-                  style={{ fontSize:"11px", background:"none",
-                    border:`1px dashed ${T.accent}`, borderRadius:"9999px",
-                    padding:"2px 10px", color:T.accent, cursor:"pointer" }}>
-                  + Add tag
-                </button>
+                {(order.tags || []).length === 0 && (
+                  <span style={{ fontSize:"11px", color:T.textMuted }}>No tags added yet.</span>
+                )}
               </div>
-              <div style={{ marginTop:"8px", fontSize:"11px", color:T.textMuted }}>
-                Source: Direct / Google Ads · Channel: Mobile web
+            </SideCard>
+
+            {/* Manage Order Actions */}
+            <SideCard title="Manage Order">
+              <div style={{ display:"flex", flexDirection:"column", gap:"8px" }}>
+                {/* Quick workflow actions based on recommended next statuses */}
+                {recommendedStatuses && recommendedStatuses.length > 0 && (
+                  <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                    {recommendedStatuses.map(rs => {
+                      const label = WORKFLOW_STATUS_LABELS[rs] || rs.replace(/_/g, " ");
+                      const isDanger = /cancel|refund|reject/.test(rs);
+                      return (
+                        <Btn key={rs}
+                          variant={isDanger ? "danger" : "primary"}
+                          size="xs"
+                          fullWidth
+                          onClick={() => {
+                            if (rs === "shipped" && (!order.shipping_carrier || !order.tracking_number)) {
+                              onToast("Save carrier and tracking number in Shipment Details before marking shipped.");
+                              setTab("fulfil");
+                              return;
+                            }
+                            statusMutation.mutate(
+                              { status: rs },
+                              { onSuccess: () => { onToast(`${label} applied.`); }, onError: (err: any) => onToast(err.response?.data?.detail || "Could not update status.") }
+                            );
+                          }}
+                        >
+                          {label}
+                        </Btn>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* Edit Order */}
+                <Btn variant="secondary" size="xs" fullWidth onClick={() => onToast("Edit Order — Opening editor…")}>
+                  ✏️ Edit Order
+                </Btn>
+
+                {/* Print Invoice */}
+                <Btn variant="secondary" size="xs" fullWidth onClick={() => onToast("Invoice sent to print.")}>
+                  🖨 Print Invoice
+                </Btn>
+
+                {/* Print Packing Slip */}
+                <Btn variant="secondary" size="xs" fullWidth onClick={() => onToast("Print Packing Slip — Sent to print.")}>
+                  📄 Print Packing Slip
+                </Btn>
+
+                {/* Assign Courier */}
+                {isAssigning ? (
+                  <div style={{ display: "flex", gap: "6px", alignItems: "center", marginTop: "4px" }}>
+                    <select
+                      value={courierInput}
+                      onChange={e => setCourierInput(e.target.value)}
+                      style={{ flex: 1, padding: "6px 8px", background: T.inputBg, border: `1px solid ${T.border}`, borderRadius: "4px", color: T.text, fontSize: "11px", outline: "none" }}
+                    >
+                      <option value="">-- Select Courier --</option>
+                      {["Shiprocket", "Delhivery", "Bluedart", "DTDC", "Self-ship"].map(c => (
+                        <option key={c} value={c}>{c}</option>
+                      ))}
+                    </select>
+                    <Btn
+                      variant="primary"
+                      size="xs"
+                      disabled={assignCourierMutation.isPending || !courierInput}
+                      onClick={() => {
+                        assignCourierMutation.mutate(courierInput, {
+                          onSuccess: () => {
+                            onToast(`Courier assigned: ${courierInput}`);
+                            setIsAssigning(false);
+                          },
+                          onError: (err: any) => onToast(`Failed to assign: ${err.message}`)
+                        });
+                      }}
+                    >
+                      ✓
+                    </Btn>
+                    <Btn
+                      variant="ghost"
+                      size="xs"
+                      onClick={() => setIsAssigning(false)}
+                    >
+                      ✕
+                    </Btn>
+                  </div>
+                ) : (
+                  <Btn
+                    variant="secondary"
+                    size="xs"
+                    fullWidth
+                    disabled={assignCourierMutation.isPending}
+                    onClick={() => {
+                      setCourierInput(order.shipping_carrier || "Shiprocket");
+                      setIsAssigning(true);
+                    }}
+                  >
+                    {assignCourierMutation.isPending ? "Assigning..." : "🚚 Assign Courier"}
+                  </Btn>
+                )}
+
+                {/* Add Tag */}
+                {isAddingTag ? (
+                  <div style={{ display: "flex", gap: "6px", alignItems: "center", marginTop: "4px" }}>
+                    <input
+                      type="text"
+                      placeholder="Enter tag..."
+                      value={tagInput}
+                      onChange={e => setTagInput(e.target.value)}
+                      style={{ flex: 1, padding: "6px 8px", background: T.inputBg, border: `1px solid ${T.border}`, borderRadius: "4px", color: T.text, fontSize: "11px", outline: "none" }}
+                    />
+                    <Btn
+                      variant="primary"
+                      size="xs"
+                      disabled={addTagMutation.isPending || !tagInput.trim()}
+                      onClick={() => {
+                        const trimmed = tagInput.trim();
+                        addTagMutation.mutate(trimmed, {
+                          onSuccess: () => {
+                            onToast(`Tag "${trimmed}" added.`);
+                            setTagInput("");
+                            setIsAddingTag(false);
+                          },
+                          onError: (err: any) => onToast(`Failed to add tag: ${err.message}`)
+                        });
+                      }}
+                    >
+                      ✓
+                    </Btn>
+                    <Btn
+                      variant="ghost"
+                      size="xs"
+                      onClick={() => setIsAddingTag(false)}
+                    >
+                      ✕
+                    </Btn>
+                  </div>
+                ) : (
+                  <Btn
+                    variant="secondary"
+                    size="xs"
+                    fullWidth
+                    disabled={addTagMutation.isPending}
+                    onClick={() => {
+                      setTagInput("");
+                      setIsAddingTag(true);
+                    }}
+                  >
+                    {addTagMutation.isPending ? "Adding tag..." : "🏷️ Add Tag"}
+                  </Btn>
+                )}
+
+                {/* Flag as Suspicious */}
+                <Btn variant="danger" size="xs" fullWidth onClick={() => onToast("Order flagged as suspicious ⚑")}>
+                  ⚑ Flag as Suspicious
+                </Btn>
+
+                {/* Shipment details */}
+                {order.fulfillment_status !== "fulfilled" && (
+                  <Btn variant="primary" size="xs" fullWidth onClick={() => setTab("fulfil")}>
+                    🚚 Shipment Details
+                  </Btn>
+                )}
+
+                {/* Issue Refund */}
+                {order.payment_status === "paid" && (
+                  <Btn variant="secondary" size="xs" fullWidth onClick={() => setRefundOpen(true)}>
+                    💰 Issue Refund
+                  </Btn>
+                )}
+
+                {/* Cancel Order */}
+                {!["cancelled", "cancelled_by_customer", "cancelled_by_admin", "delivered", "completed", "refunded"].includes(order.status) && (
+                  <Btn variant="danger" size="xs" fullWidth onClick={() => setCancelOpen(true)}>
+                    ✕ Cancel Order
+                  </Btn>
+                )}
               </div>
             </SideCard>
           </div>
         </div>
       </div>
+
+      {/* Cancel Modal */}
+      {cancelOpen && (
+        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.6)", zIndex:500, display:"flex", alignItems:"center", justifyContent:"center" }}>
+          <div style={{ background:T.cardBg, border:`1px solid ${T.border}`, borderRadius:"8px", padding:"20px", width:"360px", display:"flex", flexDirection:"column", gap:"12px" }}>
+            <div style={{ fontSize:"16px", fontWeight:700, color:T.text }}>Cancel Order</div>
+            <p style={{ fontSize:"12px", color:T.textMuted, margin:0 }}>Please provide a reason for cancelling this order.</p>
+            <select value={cancelReason} onChange={e => setCancelReason(e.target.value)}
+              style={{ width:"100%", padding:"9px 12px", background:T.inputBg, border:`1px solid ${T.border}`, borderRadius:"6px", color:T.text, fontSize:"12px", outline:"none" }}>
+              <option value="">Select cancellation reason…</option>
+              {['Out of Stock', 'Damaged Product', 'Fraud', 'Delivery Unavailable', 'Other'].map(reason => <option key={reason} value={reason}>{reason}</option>)}
+            </select>
+            <textarea
+              value={cancelReason}
+              onChange={e => setCancelReason(e.target.value)}
+              placeholder="Add details or enter another reason…"
+              rows={3}
+              style={{ width:"100%", padding:"9px 12px", background:T.inputBg, border:`1px solid ${T.border}`, borderRadius:"6px", color:T.text, fontSize:"12px", outline:"none", resize:"none" }}
+            />
+            <div style={{ display:"flex", gap:"8px", justifyContent:"flex-end" }}>
+              <Btn variant="ghost" size="sm" onClick={() => setCancelOpen(false)}>Cancel</Btn>
+              <Btn variant="danger" size="sm" disabled={!cancelReason.trim() || cancelMutation.isPending} onClick={handleCancel}>
+                {cancelMutation.isPending ? "Cancelling..." : "Confirm Cancel"}
+              </Btn>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Refund Modal */}
+      {refundOpen && (
+        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.6)", zIndex:500, display:"flex", alignItems:"center", justifyContent:"center" }}>
+          <div style={{ background:T.cardBg, border:`1px solid ${T.border}`, borderRadius:"8px", padding:"20px", width:"360px", display:"flex", flexDirection:"column", gap:"12px" }}>
+            <div style={{ fontSize:"16px", fontWeight:700, color:T.text }}>Issue Refund</div>
+            <div>
+              <label style={{ display:"block", fontSize:"11px", fontWeight:700, color:T.textLabel, textTransform:"uppercase", marginBottom:"6px" }}>Refund Amount (Max ₹{parseFloat(order.total).toLocaleString("en-IN")})</label>
+              <input
+                type="number"
+                value={refundAmount}
+                onChange={e => setRefundAmount(e.target.value)}
+                placeholder="e.g. 500"
+                style={{ width:"100%", padding:"9px 12px", background:T.inputBg, border:`1px solid ${T.border}`, borderRadius:"6px", color:T.text, fontSize:"12px", outline:"none" }}
+              />
+            </div>
+            <div>
+              <label style={{ display:"block", fontSize:"11px", fontWeight:700, color:T.textLabel, textTransform:"uppercase", marginBottom:"6px" }}>Reason</label>
+              <textarea
+                value={refundReason}
+                onChange={e => setRefundReason(e.target.value)}
+                placeholder="e.g. Return received, damaged item..."
+                rows={2}
+                style={{ width:"100%", padding:"9px 12px", background:T.inputBg, border:`1px solid ${T.border}`, borderRadius:"6px", color:T.text, fontSize:"12px", outline:"none", resize:"none" }}
+              />
+            </div>
+            <div style={{ display:"flex", gap:"8px", justifyContent:"flex-end" }}>
+              <Btn variant="ghost" size="sm" onClick={() => setRefundOpen(false)}>Cancel</Btn>
+              <Btn variant="primary" size="sm" disabled={!refundAmount.trim() || refundMutation.isPending} onClick={handleRefund}>
+                {refundMutation.isPending ? "Refunding..." : "Confirm Refund"}
+              </Btn>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }
@@ -881,13 +1557,15 @@ function SideCard({ title, action, children }: {
 }) {
   return (
     <div style={{ background:T.cardBg, border:`1px solid ${T.borderMuted}`,
-      borderRadius:"8px", overflow:"hidden" }}>
+      borderRadius:"12px",
+      boxShadow:"0 1px 0 rgba(255,255,255,0.03), 0 10px 24px rgba(0,0,0,0.16)",
+      flexShrink: 0 }}>
       <div style={{ padding:"10px 14px", borderBottom:`1px solid ${T.borderMuted}`,
         display:"flex", justifyContent:"space-between", alignItems:"center" }}>
-        <span style={{ fontSize:"12px", fontWeight:600, color:T.text }}>{title}</span>
+        <span style={{ fontSize:"13px", fontWeight:700, color:T.text }}>{title}</span>
         {action}
       </div>
-      <div style={{ padding:"12px 14px", display:"flex", flexDirection:"column", gap:"4px" }}>
+      <div style={{ padding:"14px", display:"flex", flexDirection:"column", gap:"8px" }}>
         {children}
       </div>
     </div>
@@ -932,6 +1610,11 @@ export default function AdminOrdersPage() {
   const [page, setPage]               = useState(1);
   const [perPage, setPerPage]         = useState(25);
   const [detailOrder, setDetailOrder] = useState<Order|null>(null);
+  const [detailTab, setDetailTab] = useState<"timeline"|"items"|"fulfil"|"notes">("timeline");
+  const [detailCancelOpen, setDetailCancelOpen] = useState(false);
+  const [detailRefundOpen, setDetailRefundOpen] = useState(false);
+  const [detailAssignCourierOpen, setDetailAssignCourierOpen] = useState(false);
+  const [detailAddTagOpen, setDetailAddTagOpen] = useState(false);
   const [toasts, setToasts]           = useState<{id:number;msg:string}[]>([]);
   const [bulkMenuOpen, setBulkMenuOpen] = useState(false);
 
@@ -940,11 +1623,138 @@ export default function AdminOrdersPage() {
   const dismissToast = (id:number) =>
     setToasts(t => t.filter(x => x.id!==id));
 
-  // Show arrival toast on mount
-  useEffect(() => {
-    const t = setTimeout(() => pushToast("New order: #ORD-4832 — Ravi Shah — ₹1,050"), 2500);
-    return () => clearTimeout(t);
-  }, []);
+  // Map local states to API query parameters
+  const apiFilters: any = {
+    page,
+    pageSize: perPage,
+    sort: sortKey === "date" ? (sortDir === "desc" ? "newest" : "oldest") : (sortKey === "total" ? (sortDir === "desc" ? "total_high" : "total_low") : "newest"),
+    q: search || undefined,
+  };
+
+  // Add tab filters
+  if (activeTab === "Pending") {
+    apiFilters.paymentStatus = "pending";
+  } else if (activeTab === "Processing") {
+    apiFilters.fulfillmentStatus = "unfulfilled";
+  } else if (activeTab === "Shipped") {
+    apiFilters.fulfillmentStatus = "fulfilled";
+  } else if (activeTab === "Delivered") {
+    apiFilters.status = "delivered";
+  } else if (activeTab === "Cancelled") {
+    apiFilters.status = "cancelled";
+  } else if (activeTab === "Returned") {
+    apiFilters.status = "return_received";
+  }
+
+  // Add drawer filters (override if set)
+  if (filters.orderStatus.length > 0) {
+    apiFilters.status = frontendStatusToDb(filters.orderStatus[0]);
+  }
+  if (filters.paymentStatus.length > 0) {
+    apiFilters.paymentStatus = frontendPaymentStatusToDb(filters.paymentStatus[0]);
+  }
+  if (filters.tags.length > 0) {
+    apiFilters.tag = filters.tags[0];
+  }
+
+  const { data, isLoading } = useAdminOrders(apiFilters);
+  const { data: analyticsData } = useAdminAnalyticsOverview();
+
+  // Orders Today calculation
+  const oToday = analyticsData?.orders_today ?? 0;
+  const oYest = analyticsData?.orders_yesterday ?? 0;
+  const oDiff = oToday - oYest;
+  const oDelta = oDiff >= 0 ? `+${oDiff} vs yesterday` : `${oDiff} vs yesterday`;
+  const oDeltaType = oDiff >= 0 ? "up" : "down";
+
+  // Revenue Today calculation
+  const rToday = analyticsData?.revenue_today ?? 0;
+  const rYest = analyticsData?.revenue_yesterday ?? 0;
+  const rPct = rYest > 0 ? ((rToday - rYest) / rYest * 100) : 0;
+  const rDelta = rPct >= 0 ? `+${rPct.toFixed(1)}%` : `${rPct.toFixed(1)}%`;
+  const rDeltaType = rPct >= 0 ? "up" : "down";
+
+  // Shipped Today calculation
+  const sToday = analyticsData?.shipped_today ?? 0;
+  const sYest = analyticsData?.shipped_yesterday ?? 0;
+  const sDiff = sToday - sYest;
+  const sDelta = sDiff >= 0 ? `+${sDiff} vs yesterday` : `${sDiff} vs yesterday`;
+  const sDeltaType = sDiff >= 0 ? "up" : "down";
+
+  // Cancelled Today calculation
+  const cToday = analyticsData?.cancelled_today ?? 0;
+  const cYest = analyticsData?.cancelled_yesterday ?? 0;
+  const cDiff = cToday - cYest;
+  const cDelta = cDiff >= 0 ? `+${cDiff} vs yesterday` : `${cDiff} vs yesterday`;
+  const cDeltaType = cDiff >= 0 ? "up" : "down";
+
+  // Average Order Value calculation
+  const aovValue = analyticsData?.aov ?? 0;
+
+  // Map API items to local Order format
+  const ordersList: Order[] = (data?.items || []).map((o: any) => {
+    const customerName = o.user ? `${o.user.first_name} ${o.user.last_name}` : (o.shipping_address?.recipient_name || "Guest Customer");
+    const email = o.user?.email || o.guest_email || "—";
+    const phone = o.user?.phone || o.guest_phone || o.shipping_address?.phone || "—";
+    const initials = customerName.split(" ").map((n: string) => n[0]).join("").toUpperCase().substring(0, 2) || "GC";
+    
+    return {
+      id: o.order_number,
+      uuid: o.uuid,
+      customer: customerName,
+      email,
+      phone,
+      avatar: initials,
+      items: o.items?.length || 0,
+      total: `₹${parseFloat(o.total).toLocaleString("en-IN")}`,
+      totalNum: parseFloat(o.total),
+      payment: mapPaymentStatus(o.payment_status),
+      fulfilment: mapFulfilmentStatus(o.fulfillment_status, o.status),
+      courier: o.shipping_carrier || "—",
+      city: o.shipping_address?.city || "—",
+      state: o.shipping_address?.state || "—",
+      date: new Date(o.created_at).toLocaleDateString("en-IN", { day: '2-digit', month: 'short', year: 'numeric' }),
+      dateRaw: new Date(o.created_at),
+      tags: o.tags || [],
+      riskScore: o.risk_score || 0,
+    };
+  });
+
+  const totalPages = data ? Math.max(1, Math.ceil(data.total / perPage)) : 1;
+
+  const tabCounts: Record<TabKey, string> = {
+    All: data?.total !== undefined && activeTab === "All" ? String(data.total) : "—",
+    Pending: data?.total !== undefined && activeTab === "Pending" ? String(data.total) : "—",
+    Processing: data?.total !== undefined && activeTab === "Processing" ? String(data.total) : "—",
+    Shipped: data?.total !== undefined && activeTab === "Shipped" ? String(data.total) : "—",
+    Delivered: data?.total !== undefined && activeTab === "Delivered" ? String(data.total) : "—",
+    Cancelled: data?.total !== undefined && activeTab === "Cancelled" ? String(data.total) : "—",
+    Returned: data?.total !== undefined && activeTab === "Returned" ? String(data.total) : "—",
+  };
+
+  const allSel = ordersList.length > 0 && ordersList.every(o => selected.has(o.uuid));
+  const someSel = ordersList.some(o => selected.has(o.uuid));
+
+  const toggleSelectAll = () => {
+    const next = new Set(selected);
+    if (allSel) ordersList.forEach(o => next.delete(o.uuid));
+    else        ordersList.forEach(o => next.add(o.uuid));
+    setSelected(next);
+  };
+
+  const toggleSelect = (uuid: string) => {
+    const next = new Set(selected);
+    next.has(uuid) ? next.delete(uuid) : next.add(uuid);
+    setSelected(next);
+  };
+
+  const handleSort = (key: typeof sortKey) => {
+    if (sortKey===key) setSortDir(d=>d==="asc"?"desc":"asc");
+    else { setSortKey(key); setSortDir("desc"); }
+  };
+
+  const activeFilterCount = Object.values(filters).flat().length;
+  const removeFilter = (key:keyof FilterState) => setFilters({...filters,[key]:[]});
 
   // Close overflow menu on outside click
   useEffect(() => {
@@ -953,69 +1763,6 @@ export default function AdminOrdersPage() {
     document.addEventListener("click", h, { capture:true, once:true });
     return () => document.removeEventListener("click", h, { capture:true });
   }, [openMenu]);
-
-  // ── filter + sort ──
-  const filtered = ORDERS.filter(o => {
-    const q = search.toLowerCase();
-    const matchSearch = !search ||
-      o.id.toLowerCase().includes(q) || o.customer.toLowerCase().includes(q) ||
-      o.email.toLowerCase().includes(q) || o.city.toLowerCase().includes(q);
-    const matchTab =
-      activeTab==="All" ||
-      (activeTab==="Pending"    && o.payment==="Pending") ||
-      (activeTab==="Processing" && o.fulfilment==="Unfulfilled") ||
-      (activeTab==="Shipped"    && (o.fulfilment==="Shipped"||o.fulfilment==="Out for Delivery")) ||
-      (activeTab==="Delivered"  && o.fulfilment==="Delivered") ||
-      (activeTab==="Cancelled"  && o.fulfilment==="Cancelled") ||
-      (activeTab==="Returned"   && (o.fulfilment==="Return Requested"||o.fulfilment==="Return Received"));
-    const matchPay  = !filters.paymentStatus.length || filters.paymentStatus.includes(o.payment);
-    const matchCour = !filters.courier.length       || filters.courier.includes(o.courier);
-    const matchTags = !filters.tags.length          || filters.tags.some(t=>o.tags.includes(t));
-    return matchSearch && matchTab && matchPay && matchCour && matchTags;
-  }).sort((a,b) => {
-    const dir = sortDir==="asc" ? 1 : -1;
-    if (sortKey==="date")     return dir*(a.dateRaw.getTime()-b.dateRaw.getTime());
-    if (sortKey==="total")    return dir*(a.totalNum-b.totalNum);
-    if (sortKey==="customer") return dir*a.customer.localeCompare(b.customer);
-    return 0;
-  });
-
-  const totalPages = Math.max(1, Math.ceil(filtered.length/perPage));
-  const paged = filtered.slice((page-1)*perPage, page*perPage);
-
-  const tabCounts: Record<TabKey,number> = {
-    All:        ORDERS.length,
-    Pending:    ORDERS.filter(o=>o.payment==="Pending").length,
-    Processing: ORDERS.filter(o=>o.fulfilment==="Unfulfilled").length,
-    Shipped:    ORDERS.filter(o=>o.fulfilment==="Shipped"||o.fulfilment==="Out for Delivery").length,
-    Delivered:  ORDERS.filter(o=>o.fulfilment==="Delivered").length,
-    Cancelled:  ORDERS.filter(o=>o.fulfilment==="Cancelled").length,
-    Returned:   ORDERS.filter(o=>o.fulfilment==="Return Requested"||o.fulfilment==="Return Received").length,
-  };
-
-  const allSel = paged.length>0 && paged.every(o=>selected.has(o.id));
-  const someSel = paged.some(o=>selected.has(o.id));
-
-  const toggleSelectAll = () => {
-    const next = new Set(selected);
-    if (allSel) paged.forEach(o=>next.delete(o.id));
-    else        paged.forEach(o=>next.add(o.id));
-    setSelected(next);
-  };
-
-  const toggleSelect = (id:string) => {
-    const next = new Set(selected);
-    next.has(id) ? next.delete(id) : next.add(id);
-    setSelected(next);
-  };
-
-  const handleSort = (key:typeof sortKey) => {
-    if (sortKey===key) setSortDir(d=>d==="asc"?"desc":"asc");
-    else { setSortKey(key); setSortDir("desc"); }
-  };
-
-  const activeFilterCount = Object.values(filters).flat().length;
-  const removeFilter = (key:keyof FilterState) => setFilters({...filters,[key]:[]});
 
   // KPI spark data
   const sparks = {
@@ -1052,7 +1799,7 @@ export default function AdminOrdersPage() {
             <div>
               <h1 style={{ margin:0, fontSize:"24px", fontWeight:700, color:T.text }}>Orders</h1>
               <p style={{ margin:"4px 0 0", fontSize:"12px", color:T.textMuted }}>
-                {ORDERS.length.toLocaleString()} total orders
+                {data ? data.total.toLocaleString() : "0"} total orders
               </p>
             </div>
             <div style={{ display:"flex", gap:"8px", alignItems:"center", flexWrap:"wrap" }}>
@@ -1070,14 +1817,14 @@ export default function AdminOrdersPage() {
           {/* ── KPI Row ── */}
           <div role="region" aria-label="Order metrics"
             style={{ display:"flex", gap:"12px", flexWrap:"wrap" }}>
-            <KpiCard label="Orders Today"       value="124"       delta="+12 vs yesterday"  deltaType="up"      sparkData={sparks.orders}  onClick={()=>{ setActiveTab("All");        pushToast("Filtered: Today's orders"); }} />
-            <KpiCard label="Revenue Today"      value="₹1,54,752" delta="+8.4%"             deltaType="up"      sparkData={sparks.revenue} />
-            <KpiCard label="Avg Order Value"    value="₹1,248"    delta="same as yesterday" deltaType="neutral" sparkData={sparks.avg}     />
-            <KpiCard label="Pending Fulfilment" value={String(tabCounts.Processing)} delta="Action needed" deltaType="down" sparkData={sparks.pending} accentColor={T.processing} onClick={()=>{ setActiveTab("Processing"); pushToast("Filtered: Pending fulfilment"); }} />
-            <KpiCard label="Shipped Today"      value="34"        delta="+5 vs yesterday"   deltaType="up"      sparkData={sparks.shipped} onClick={()=>{ setActiveTab("Shipped");    pushToast("Filtered: Shipped orders"); }} />
-            <KpiCard label="Cancelled Today"    value="3"         delta="−2 vs yesterday"   deltaType="up"      sparkData={sparks.cancel}  accentColor={T.cancelled} onClick={()=>{ setActiveTab("Cancelled");  pushToast("Filtered: Cancelled orders"); }} />
-            <KpiCard label="Return Requests"    value={String(tabCounts.Returned)} delta="1 new today" deltaType="down" sparkData={sparks.returns} accentColor={T.returned} onClick={()=>{ setActiveTab("Returned"); pushToast("Filtered: Return requests"); }} />
-            <KpiCard label="COD Pending"        value={String(tabCounts.Pending)} delta="Needs collection" deltaType="neutral" sparkData={sparks.cod} accentColor={T.attempted} />
+            <KpiCard label="Orders Today"       value={String(oToday)} delta={oDelta}  deltaType={oDeltaType}      sparkData={sparks.orders}  onClick={()=>{ setActiveTab("All");        pushToast("Filtered: Today's orders"); }} />
+            <KpiCard label="Revenue Today"      value={`₹${rToday.toLocaleString("en-IN")}`} delta={rDelta}             deltaType={rDeltaType}      sparkData={sparks.revenue} />
+            <KpiCard label="Avg Order Value"    value={`₹${aovValue.toLocaleString("en-IN")}`}    delta="for current period" deltaType="neutral" sparkData={sparks.avg}     />
+            <KpiCard label="Pending Fulfilment" value={data?.total !== undefined && activeTab === "Processing" ? String(data.total) : "—"} delta="Action needed" deltaType="down" sparkData={sparks.pending} accentColor={T.processing} onClick={()=>{ setActiveTab("Processing"); pushToast("Filtered: Pending fulfilment"); }} />
+            <KpiCard label="Shipped Today"      value={String(sToday)}        delta={sDelta}   deltaType={sDeltaType}      sparkData={sparks.shipped} onClick={()=>{ setActiveTab("Shipped");    pushToast("Filtered: Shipped orders"); }} />
+            <KpiCard label="Cancelled Today"    value={String(cToday)}         delta={cDelta}   deltaType={cDeltaType}      sparkData={sparks.cancel}  accentColor={T.cancelled} onClick={()=>{ setActiveTab("Cancelled");  pushToast("Filtered: Cancelled orders"); }} />
+            <KpiCard label="Return Requests"    value={data?.total !== undefined && activeTab === "Returned" ? String(data.total) : "—"} delta="1 new today" deltaType="down" sparkData={sparks.returns} accentColor={T.returned} onClick={()=>{ setActiveTab("Returned"); pushToast("Filtered: Return requests"); }} />
+            <KpiCard label="COD Pending"        value={data?.total !== undefined && activeTab === "Pending" ? String(data.total) : "—"} delta="Needs collection" deltaType="neutral" sparkData={sparks.cod} accentColor={T.attempted} />
           </div>
 
           {/* ── Status Tabs ── */}
@@ -1088,7 +1835,7 @@ export default function AdminOrdersPage() {
               <button key={tab.key} role="tab" aria-selected={activeTab===tab.key}
                 className={`ao-tab${activeTab===tab.key?" active":""}`}
                 onClick={() => { setActiveTab(tab.key); setPage(1); }}>
-                {tab.label} ({tabCounts[tab.key]})
+                {tab.label} {tabCounts[tab.key] !== "—" ? `(${tabCounts[tab.key]})` : ""}
               </button>
             ))}
           </div>
@@ -1250,19 +1997,33 @@ export default function AdminOrdersPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {paged.map(order => {
-                    const isSel = selected.has(order.id);
+                  {isLoading && (
+                    <tr><td colSpan={11}>
+                      <div style={{ display:"flex", alignItems:"center", justifyContent:"center", padding:"60px 20px", color:T.text }}>
+                        Loading orders...
+                      </div>
+                    </td></tr>
+                  )}
+                  {!isLoading && ordersList.map(order => {
+                    const isSel = selected.has(order.uuid);
                     const pSt = PAYMENT_STYLE[order.payment];
                     const fSt = FULFILMENT_STYLE[order.fulfilment];
                     return (
-                      <tr key={order.id} role="row" aria-selected={isSel}
+                      <tr key={order.uuid} role="row" aria-selected={isSel}
                         className={`ao-row${isSel?" selected":""}`}
-                        onClick={()=>setDetailOrder(order)}>
+                        onClick={()=>{
+                          setDetailTab("timeline");
+                          setDetailCancelOpen(false);
+                          setDetailRefundOpen(false);
+                          setDetailAssignCourierOpen(false);
+                          setDetailAddTagOpen(false);
+                          setDetailOrder(order);
+                        }}>
                         {/* checkbox cell — stop propagation so row-click doesn't also open detail */}
                         <td style={{ padding:"12px 14px", textAlign:"center" }}
                           onClick={e=>e.stopPropagation()}>
                           <input type="checkbox" aria-label={`Select order ${order.id}`}
-                            checked={isSel} onChange={()=>toggleSelect(order.id)}
+                            checked={isSel} onChange={()=>toggleSelect(order.uuid)}
                             style={{ accentColor:T.accent, cursor:"pointer" }} />
                         </td>
                         <td style={{ padding:"12px 14px", whiteSpace:"nowrap" }}>
@@ -1306,29 +2067,96 @@ export default function AdminOrdersPage() {
                           onClick={e=>e.stopPropagation()}>
                           <div style={{ display:"flex", gap:"6px", alignItems:"center" }}>
                             <Btn variant="secondary" size="sm"
-                              onClick={()=>setDetailOrder(order)}>
+                              onClick={()=>{
+                                setDetailTab("timeline");
+                                setDetailCancelOpen(false);
+                                setDetailRefundOpen(false);
+                                setDetailAssignCourierOpen(false);
+                                setDetailAddTagOpen(false);
+                                setDetailOrder(order);
+                              }}>
                               View
                             </Btn>
                             {order.fulfilment==="Unfulfilled" && (
                               <Btn variant="primary" size="sm"
-                                onClick={()=>setDetailOrder(order)}>
+                                onClick={()=>{
+                                  setDetailTab("fulfil");
+                                  setDetailCancelOpen(false);
+                                  setDetailRefundOpen(false);
+                                  setDetailAssignCourierOpen(false);
+                                  setDetailAddTagOpen(false);
+                                  setDetailOrder(order);
+                                }}>
                                 Fulfil
                               </Btn>
                             )}
                             <div style={{ position:"relative" }}>
                               <button aria-haspopup="menu"
-                                aria-expanded={openMenu===order.id}
+                                id={`menu-btn-${order.uuid}`}
+                                aria-expanded={openMenu===order.uuid}
                                 className="ao-btn ao-btn-secondary ao-btn-sm"
                                 style={{ padding:"4px 8px" }}
-                                onClick={e=>{ e.stopPropagation(); setOpenMenu(openMenu===order.id?null:order.id); }}>
+                                onClick={e=>{ e.stopPropagation(); setOpenMenu(openMenu===order.uuid?null:order.uuid); }}>
                                 ⋮
                               </button>
-                              {openMenu===order.id && (
-                                <OverflowMenu orderId={order.id}
+                              {openMenu===order.uuid && (
+                                <OverflowMenu orderId={order.uuid}
+                                  triggerId={`menu-btn-${order.uuid}`}
                                   onAction={label=>{
                                     setOpenMenu(null);
-                                    if (label==="View Order") setDetailOrder(order);
-                                    else pushToast(`${label} — ${order.id}`);
+                                    if (label==="View Order") {
+                                      setDetailTab("timeline");
+                                      setDetailCancelOpen(false);
+                                      setDetailRefundOpen(false);
+                                      setDetailAssignCourierOpen(false);
+                                      setDetailAddTagOpen(false);
+                                      setDetailOrder(order);
+                                    } else if (label==="Shipment Details" || label==="Add Tracking Number") {
+                                      setDetailTab("fulfil");
+                                      setDetailCancelOpen(false);
+                                      setDetailRefundOpen(false);
+                                      setDetailAssignCourierOpen(false);
+                                      setDetailAddTagOpen(false);
+                                      setDetailOrder(order);
+                                    } else if (label==="Cancel Order") {
+                                      setDetailTab("timeline");
+                                      setDetailCancelOpen(true);
+                                      setDetailRefundOpen(false);
+                                      setDetailAssignCourierOpen(false);
+                                      setDetailAddTagOpen(false);
+                                      setDetailOrder(order);
+                                    } else if (label==="Refund Order") {
+                                      setDetailTab("timeline");
+                                      setDetailCancelOpen(false);
+                                      setDetailRefundOpen(true);
+                                      setDetailAssignCourierOpen(false);
+                                      setDetailAddTagOpen(false);
+                                      setDetailOrder(order);
+                                    } else if (label==="Assign Courier") {
+                                      setDetailTab("timeline");
+                                      setDetailCancelOpen(false);
+                                      setDetailRefundOpen(false);
+                                      setDetailAssignCourierOpen(true);
+                                      setDetailAddTagOpen(false);
+                                      setDetailOrder(order);
+                                    } else if (label==="Add Tag") {
+                                      setDetailTab("timeline");
+                                      setDetailCancelOpen(false);
+                                      setDetailRefundOpen(false);
+                                      setDetailAssignCourierOpen(false);
+                                      setDetailAddTagOpen(true);
+                                      setDetailOrder(order);
+                                    } else {
+                                      if (label==="Edit Order") {
+                                        pushToast("Edit Order — Opening editor…");
+                                      } else if (label==="Print Invoice") {
+                                        pushToast("Invoice sent to print.");
+                                      } else if (label==="Print Packing Slip") {
+                                        pushToast("Print Packing Slip — Sent to print.");
+                                      } else if (label==="Flag as Suspicious") {
+                                        pushToast("Order flagged as suspicious ⚑");
+                                      }
+                                    }
                                   }} />
                               )}
                             </div>
@@ -1337,7 +2165,7 @@ export default function AdminOrdersPage() {
                       </tr>
                     );
                   })}
-                  {paged.length===0 && (
+                  {!isLoading && ordersList.length===0 && (
                     <tr><td colSpan={11}>
                       <div aria-live="polite" style={{ display:"flex", flexDirection:"column",
                         alignItems:"center", padding:"60px 20px", gap:"12px" }}>
@@ -1362,13 +2190,13 @@ export default function AdminOrdersPage() {
             </div>
 
             {/* ── Pagination ── */}
-            {filtered.length > 0 && (
+            {data && data.total > 0 && (
               <div style={{ padding:"12px 16px", borderTop:`1px solid ${T.borderMuted}`,
                 display:"flex", alignItems:"center", justifyContent:"space-between",
                 flexWrap:"wrap", gap:"10px" }}>
                 <span style={{ fontSize:"12px", color:T.textMuted }}>
-                  Showing {(page-1)*perPage+1}–{Math.min(page*perPage,filtered.length)}{" "}
-                  of {filtered.length.toLocaleString()}
+                  Showing {(page-1)*perPage+1}–{Math.min(page*perPage,data.total)}{" "}
+                  of {data.total.toLocaleString()}
                 </span>
                 <nav aria-label="Pagination" style={{ display:"flex", gap:"4px", alignItems:"center" }}>
                   <button className="ao-page-btn" disabled={page===1}
@@ -1385,7 +2213,7 @@ export default function AdminOrdersPage() {
                       </button>
                     );
                   })}
-                  {totalPages>5 && <span style={{ color:T.textMuted,fontSize:"12px" }}>…</span>}
+                  {totalPages>5 && page<totalPages-2 && <span style={{ color:T.textMuted,fontSize:"12px" }}>…</span>}
                   <button className="ao-page-btn" disabled={page===totalPages}
                     onClick={()=>setPage(p=>p+1)}>›</button>
                 </nav>
@@ -1407,9 +2235,12 @@ export default function AdminOrdersPage() {
 
         {/* ── Order Detail Panel ── */}
         {detailOrder && (
-          <OrderDetailPanel order={detailOrder}
+          <OrderDetailPanel orderSummary={detailOrder}
             onClose={()=>setDetailOrder(null)}
-            onToast={pushToast} />
+            onToast={pushToast}
+            initialTab={detailTab}
+            initialCancelOpen={detailCancelOpen}
+            initialRefundOpen={detailRefundOpen} />
         )}
 
         {/* ── Toast stack ── */}

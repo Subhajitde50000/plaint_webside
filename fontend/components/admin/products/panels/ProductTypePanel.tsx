@@ -59,7 +59,7 @@ export function ProductTypePanel({ data, errors, onChange }: Props) {
 
   return (
     <Panel>
-      <PanelHeading>Product Type</PanelHeading>
+      <PanelHeading>Product Type <span style={{ color: '#e5534b', marginLeft: 4 }}>*</span></PanelHeading>
       {errors.productType && (
         <p role="alert" style={{ fontSize: 11, color: '#e5534b', marginBottom: 10, fontWeight: 500 }}>⚠ {errors.productType}</p>
       )}

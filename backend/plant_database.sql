@@ -423,12 +423,17 @@ CREATE TABLE IF NOT EXISTS orders (
 
 
     status                  ENUM(
-        'order_placed','payment_confirmed','processing',
-        'packed','dispatched','in_transit','out_for_delivery',
-        'delivered','delivery_attempted','cancelled',
-        'return_requested','return_in_transit',
-        'return_received','refund_initiated','refunded'
-    ) NOT NULL DEFAULT 'order_placed',
+        'new_order','payment_pending','payment_failed','payment_verified','payment_confirmed',
+        'cod_eligibility_verified','cod_amount_collected','order_accepted','order_confirmed',
+        'inventory_reserved','picking','quality_check','packed','ready_for_dispatch',
+        'courier_assigned','picked_up','shipped','in_transit','out_for_delivery',
+        'delivered','completed','cancelled_by_customer','cancelled_by_admin',
+        'refund_pending','refunded','return_requested','return_approved',
+        'return_pickup_scheduled','return_received','return_inspection',
+        'return_rejected','return_completed',
+        'order_placed','processing','dispatched','delivery_attempted','cancelled',
+        'return_in_transit','refund_initiated'
+    ) NOT NULL DEFAULT 'new_order',
 
     payment_status          ENUM(
         'pending','authorized','paid','partially_paid',
@@ -550,13 +555,15 @@ CREATE TABLE IF NOT EXISTS  returns (
     id              BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     order_id        BIGINT UNSIGNED NOT NULL,
     reason          ENUM(
-                        'damaged_in_transit','wrong_item','changed_mind',
-                        'quality_issue','other'
+                        'damaged_product','dead_plant','wrong_product','missing_item',
+                        'poor_quality','size_issue','changed_mind','other',
+                        'damaged_in_transit','wrong_item','quality_issue'
                     ) NOT NULL,
-    return_type     ENUM('refund','exchange','store_credit') DEFAULT 'refund',
-    status          ENUM('requested','approved','rejected','in_transit','received','refund_issued') DEFAULT 'requested',
+    return_type     ENUM('refund','replacement','exchange','store_credit') DEFAULT 'refund',
+    status          ENUM('requested','approved','rejected','pickup_scheduled','picked_up','received','inspection','refund_pending','refunded','replacement_created','completed','in_transit','refund_issued') DEFAULT 'requested',
     customer_note   TEXT,
     admin_note      TEXT,
+    evidence_urls   TEXT,
     return_tracking VARCHAR(100),
     processed_by    BIGINT UNSIGNED,
     created_at      DATETIME DEFAULT CURRENT_TIMESTAMP,

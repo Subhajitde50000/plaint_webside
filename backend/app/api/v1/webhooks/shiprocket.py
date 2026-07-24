@@ -8,15 +8,15 @@ from app.models.order import Order, OrderStatusHistory
 router = APIRouter(prefix="/webhooks/shiprocket", tags=["Webhooks"])
 
 STATUS_MAP = {
-    "PICKUP PENDING": "processing",
-    "PICKUP SCHEDULED": "processing",
-    "PICKED UP": "dispatched",
+    "PICKUP PENDING": "ready_for_dispatch",
+    "PICKUP SCHEDULED": "ready_for_dispatch",
+    "PICKED UP": "picked_up",
     "IN TRANSIT": "in_transit",
     "OUT FOR DELIVERY": "out_for_delivery",
     "DELIVERED": "delivered",
-    "DELIVERY FAILED": "delivery_attempted",
-    "UNDELIVERED": "delivery_attempted",
-    "RTO INITIATED": "return_in_transit",
+    "DELIVERY FAILED": "return_pickup_scheduled",
+    "UNDELIVERED": "return_pickup_scheduled",
+    "RTO INITIATED": "return_pickup_scheduled",
     "RTO DELIVERED": "return_received",
 }
 

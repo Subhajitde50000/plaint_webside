@@ -108,11 +108,13 @@ export default function OrderSuccessPage() {
   const orderUuid = params?.uuid as string;
   const { order, isLoading } = useOrder(orderUuid);
   const [mounted, setMounted] = useState(false);
+  const orderItems = Array.isArray(order?.items) ? order.items : [];
 
   useEffect(() => {
-    // Trigger entrance animation
     setTimeout(() => setMounted(true), 50);
   }, []);
+
+  const isCod = (order as any)?.payment_gateway === "cod";
 
   return (
     <div style={{ minHeight: "100vh", background: T.bg, fontFamily: "'Outfit', 'Inter', sans-serif" }}>
@@ -154,7 +156,6 @@ export default function OrderSuccessPage() {
         }}>
           {/* Icon */}
           <div style={{ position: "relative", display: "inline-block", marginBottom: 24 }}>
-            {/* Pulse rings */}
             <div style={{
               position: "absolute", inset: -8, borderRadius: "50%",
               border: `2px solid ${T.green}`,
@@ -187,7 +188,9 @@ export default function OrderSuccessPage() {
             fontSize: 15, color: T.muted, margin: "0 0 28px",
             lineHeight: 1.6, animation: "fadeUp 0.5s 0.3s ease both",
           }}>
-            Thank you for your purchase. Your green companions are being prepared with love.
+            {isCod
+              ? "Your order is placed! Pay in cash or UPI when your delivery arrives."
+              : "Thank you for your purchase. Your green companions are being prepared with love."}
           </p>
 
           {/* Order number */}
@@ -220,7 +223,7 @@ export default function OrderSuccessPage() {
             }}>
               {/* Items */}
               <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 14 }}>
-                {order.items.slice(0, 3).map((item, idx) => (
+                {orderItems.slice(0, 3).map((item, idx) => (
                   <div key={idx} style={{ display: "flex", justifyContent: "space-between", fontSize: 13 }}>
                     <span style={{ color: T.body, fontWeight: 600 }}>
                       {item.title} {item.variant_title ? `(${item.variant_title})` : ""}
@@ -231,9 +234,9 @@ export default function OrderSuccessPage() {
                     </span>
                   </div>
                 ))}
-                {order.items.length > 3 && (
+                {orderItems.length > 3 && (
                   <div style={{ fontSize: 12, color: T.muted }}>
-                    +{order.items.length - 3} more item{order.items.length - 3 !== 1 ? "s" : ""}
+                    +{orderItems.length - 3} more item{orderItems.length - 3 !== 1 ? "s" : ""}
                   </div>
                 )}
               </div>
@@ -244,7 +247,7 @@ export default function OrderSuccessPage() {
                 paddingTop: 12, borderTop: `1px solid ${T.border}`,
                 fontSize: 15, fontWeight: 800, color: T.heading,
               }}>
-                <span>Total paid</span>
+                <span>{isCod ? "💵 Pay on delivery (COD)" : "Total paid"}</span>
                 <span style={{ color: T.green }}>{formatPrice(order.total)}</span>
               </div>
 
@@ -260,6 +263,17 @@ export default function OrderSuccessPage() {
                       day: "2-digit", month: "short", year: "numeric",
                     })}
                   </span>
+                </div>
+              )}
+
+              {/* COD reminder */}
+              {isCod && (
+                <div style={{
+                  marginTop: 12, paddingTop: 12, borderTop: `1px solid ${T.border}`,
+                  fontSize: 12, color: T.greenMid, fontWeight: 600,
+                  background: T.greenPale, borderRadius: 8, padding: "10px 12px",
+                }}>
+                  💡 Keep exact change of {formatPrice(order.total)} ready for the delivery agent.
                 </div>
               )}
             </div>
@@ -319,7 +333,9 @@ export default function OrderSuccessPage() {
           textAlign: "center", fontSize: 13, color: T.muted, marginTop: 24,
           animation: "fadeUp 0.5s 0.8s ease both", lineHeight: 1.5,
         }}>
-          A confirmation email has been sent. You can track your order anytime from{" "}
+          {isCod
+            ? "You can track your order anytime from "
+            : "A confirmation email has been sent. You can track your order anytime from "}
           <Link href="/orders" style={{ color: T.green, textDecoration: "none", fontWeight: 600 }}>
             My Orders
           </Link>.

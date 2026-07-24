@@ -10,6 +10,7 @@ from app.models.order import Order, OrderItem, OrderStatusHistory
 from app.models.cart import Cart, CartItem
 from app.models.product import ProductVariant
 from app.models.inventory import Inventory
+from app.models.address import Address
 from app.models.discount import Discount, DiscountUsage
 from app.models.loyalty import LoyaltyAccount
 from app.schemas.order import CreateOrderRequest
@@ -37,6 +38,10 @@ class OrderService:
             if not variant:
                 raise ValueError("Selected product variant not found.")
             qty = payload.buy_now_quantity or 1
+            if qty < 1:
+                raise ValueError("Order quantity must be at least 1.")
+            if not variant.is_active or not variant.product or variant.product.status != "active":
+                raise ValueError("This product is no longer available.")
             unit_price = float(variant.price)
             order_items_data.append({
                 "variant": variant,
@@ -49,12 +54,26 @@ class OrderService:
             if not cart or not cart.items:
                 raise ValueError("Cart is empty.")
             for item in cart.items:
+                variant = item.variant
+                if not variant or not variant.is_active or not variant.product or variant.product.status != "active":
+                    raise ValueError("One or more cart products are no longer available.")
+                if item.quantity < 1:
+                    raise ValueError("Order quantity must be at least 1.")
                 order_items_data.append({
-                    "variant": item.variant,
+                    "variant": variant,
                     "quantity": item.quantity,
-                    "price": float(item.price_at_add),
+                    # Never charge the stale cart snapshot: use the live variant price.
+                    "price": float(variant.price),
                 })
             subtotal = sum(item["price"] * item["quantity"] for item in order_items_data)
+        # 2. Validate that the selected active address belongs to this customer.
+        address = db.query(Address).filter(
+            Address.id == payload.address_id,
+            Address.user_id == user.id,
+            Address.is_active.is_(True),
+        ).first()
+        if not address:
+            raise ValueError("Please select a valid active shipping address.")
 
         
         discount_amount = 0.00
@@ -111,6 +130,7 @@ class OrderService:
             gift_message=payload.gift_message,
             is_gift=bool(payload.gift_message),
             notes=payload.notes,
+            status="new_order",
         )
         db.add(order)
         db.flush()  # get order.id
@@ -137,9 +157,8 @@ class OrderService:
                 image_url=primary_image,
             ))
 
-        print(f'\n \n {user.__dict__} \n \n')
-        print(f'\n \n {payload} \n \n')
-        # 8. Reserve inventory
+        # 8. Validate inventory only. Stock is committed when an admin accepts
+        # the order, not while a customer is still paying/reviewing it.
         for item in order_items_data:
             variant = item["variant"]
             inventory = db.query(Inventory).filter(
@@ -157,12 +176,11 @@ class OrderService:
                     f"Insufficient stock for '{variant.product.title}'. "
                     f"Only {available} available."
                 )
-            inventory.reserved += item["quantity"]
 
         # 9. Initial status history
         db.add(OrderStatusHistory(
             order_id=order.id,
-            status="order_placed",
+            status="new_order",
             description="Order placed by customer",
         ))
 

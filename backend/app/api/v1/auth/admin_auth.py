@@ -5,7 +5,8 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models.admin import AdminUser, AdminRefreshToken
-from app.schemas.auth import AdminLoginRequest, AdminLoginResponse
+from app.schemas.auth import AdminLoginRequest, AdminLoginResponse, AdminUserResponse
+from app.dependencies import get_current_admin
 from app.utils.security import verify_password, create_access_token, create_refresh_token, sha256_hash
 from app.config import settings
 
@@ -30,6 +31,9 @@ async def admin_login(
     response: Response,
     db: Session = Depends(get_db),
 ):
+
+    print(payload)
+    print(response.__dict__)
     admin = db.query(AdminUser).filter(
         AdminUser.email == payload.email.lower(),
         AdminUser.is_active == True,
@@ -111,3 +115,19 @@ async def admin_logout(request: Request, response: Response, db: Session = Depen
             db.commit()
     response.delete_cookie(REFRESH_COOKIE)
     return {"message": "Logged out."}
+
+
+@router.get("/me", response_model=AdminUserResponse)
+async def get_current_admin_profile(
+    admin: AdminUser = Depends(get_current_admin),
+):
+    return AdminUserResponse(
+        uuid=admin.uuid,
+        email=admin.email,
+        first_name=admin.first_name,
+        last_name=admin.last_name,
+        role=admin.role,
+        is_active=admin.is_active,
+        avatar_url=admin.avatar_url,
+    )
+
