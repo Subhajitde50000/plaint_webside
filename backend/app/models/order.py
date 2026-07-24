@@ -193,16 +193,17 @@ class Return(Base):
     id = Column(BigInteger, primary_key=True, autoincrement=True)
     order_id = Column(BigInteger, ForeignKey("orders.id"), nullable=False)
     reason = Column(
-        Enum("damaged_in_transit", "wrong_item", "changed_mind", "quality_issue", "other"),
+        Enum("damaged_product", "dead_plant", "wrong_product", "missing_item", "poor_quality", "size_issue", "changed_mind", "other", "damaged_in_transit", "wrong_item", "quality_issue"),
         nullable=False,
     )
-    return_type = Column(Enum("refund", "exchange", "store_credit"), default="refund")
+    return_type = Column(Enum("refund", "replacement", "exchange", "store_credit"), default="refund")
     status = Column(
-        Enum("requested", "approved", "rejected", "in_transit", "received", "refund_issued"),
+        Enum("requested", "approved", "rejected", "pickup_scheduled", "picked_up", "received", "inspection", "refund_pending", "refunded", "replacement_created", "completed", "in_transit", "refund_issued"),
         default="requested",
     )
     customer_note = Column(Text)
     admin_note = Column(Text)
+    evidence_urls = Column(Text)  # JSON array of customer-uploaded image/video URLs
     return_tracking = Column(String(100))
     processed_by = Column(BigInteger, ForeignKey("admin_users.id", ondelete="SET NULL"))
     created_at = Column(DateTime, server_default=func.now())

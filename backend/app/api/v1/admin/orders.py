@@ -5,14 +5,14 @@ from typing import Optional
 
 from app.database import get_db
 from app.dependencies import require_ops_or_above, require_support_or_above, get_current_admin
-from app.models.order import Order, OrderStatusHistory, OrderNote, Refund, OrderTag
+from app.models.order import Order, OrderStatusHistory, OrderNote, Refund, OrderTag, Return
 from app.models.admin import AdminUser
 from app.models.user import User
 from app.models.address import Address
 from app.schemas.order import (
     UpdateFulfillmentRequest, AdminOrderNoteRequest, CancelOrderRequest, RefundRequest,
     AdminOrderListResponse, AdminOrderDetailResponse, UpdateTrackingRequest,
-    AssignCourierRequest, AddTagRequest
+    AssignCourierRequest, AddTagRequest, AdminReturnUpdateRequest
     , UpdateOrderStatusRequest
 )
 from app.utils.pagination import paginate
@@ -99,6 +99,24 @@ async def update_order_status(
             status_code=400,
             detail="Save carrier and tracking number before marking an order as shipped.",
         )
+
+    # Keep the existing admin workflow dropdown and the Return case in sync.
+    return_status_map = {
+        "return_approved": "approved",
+        "return_pickup_scheduled": "pickup_scheduled",
+        "return_received": "received",
+        "return_inspection": "inspection",
+        "return_rejected": "rejected",
+        "return_completed": "completed",
+    }
+    if payload.status in return_status_map:
+        ret = db.query(Return).filter(Return.order_id == order.id).order_by(Return.created_at.desc()).first()
+        if not ret:
+            raise HTTPException(status_code=400, detail="No return request exists for this order.")
+        ret.status = return_status_map[payload.status]
+        ret.processed_by = admin.id
+        if payload.description:
+            ret.admin_note = payload.description
 
     order.status = payload.status
     if payload.status in {"delivered", "completed"}:
@@ -197,6 +215,83 @@ async def get_order(
     if not order:
         raise HTTPException(status_code=404, detail="Order not found.")
     return order
+
+
+@router.post("/{order_uuid}/return")
+async def update_return_request(
+    order_uuid: str,
+    payload: AdminReturnUpdateRequest,
+    db: Session = Depends(get_db),
+    admin: AdminUser = Depends(require_ops_or_above),
+):
+    """Review and progress the active return case for an order."""
+    order = db.query(Order).filter(Order.uuid == order_uuid).first()
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found.")
+    ret = db.query(Return).filter(Return.order_id == order.id).order_by(Return.created_at.desc()).first()
+    if not ret:
+        raise HTTPException(status_code=404, detail="No return request found for this order.")
+
+    action = payload.action.strip().lower()
+    status_map = {
+        "approve": ("approved", "return_approved"),
+        "reject": ("rejected", "return_rejected"),
+        "schedule_pickup": ("pickup_scheduled", "return_pickup_scheduled"),
+        "picked_up": ("picked_up", "return_pickup_scheduled"),
+        "received": ("received", "return_received"),
+        "inspect_passed": ("inspection", "return_inspection"),
+        "inspect_failed": ("rejected", "return_rejected"),
+        "replacement": ("replacement_created", "return_completed"),
+        "exchange": ("replacement_created", "return_completed"),
+    }
+    if action not in {*status_map, "refund"}:
+        raise HTTPException(status_code=400, detail="Unsupported return action.")
+    if action in {"reject", "inspect_failed"} and not payload.admin_note:
+        raise HTTPException(status_code=400, detail="A rejection reason is required.")
+
+    if action == "refund":
+        if ret.return_type not in {"refund", "store_credit"}:
+            raise HTTPException(status_code=400, detail="This return is not a refund request.")
+        gateway_refund_id = None
+        if order.razorpay_payment_id:
+            try:
+                gateway_refund_id = PaymentService().create_refund(
+                    payment_id=order.razorpay_payment_id, amount_paise=int(float(order.total) * 100),
+                    notes={"order_number": order.order_number, "reason": payload.admin_note or "Approved return"},
+                ).get("id")
+            except Exception:
+                gateway_refund_id = None
+        ret.status = "refunded" if gateway_refund_id else "refund_pending"
+        order.status = "refunded" if gateway_refund_id else "refund_pending"
+        if gateway_refund_id:
+            order.payment_status = "refunded"
+        db.add(Refund(
+            order_id=order.id, admin_id=admin.id, amount=order.total, reason=payload.admin_note,
+            type="full", gateway_refund_id=gateway_refund_id,
+            status="processed" if gateway_refund_id else "pending",
+        ))
+        # Accepted returned stock becomes available again once refund is approved.
+        for return_item in ret.items:
+            inv = db.query(Inventory).filter(Inventory.variant_id == return_item.order_item.variant_id).with_for_update().first()
+            if inv:
+                before = inv.quantity
+                inv.quantity += return_item.quantity
+                db.add(InventoryHistory(
+                    variant_id=inv.variant_id, admin_id=admin.id, type="return",
+                    quantity_change=return_item.quantity, quantity_before=before, quantity_after=inv.quantity,
+                    reason=f"Return approved for order {order.order_number}", reference_id=order.order_number,
+                ))
+    else:
+        ret.status, order.status = status_map[action]
+
+    ret.processed_by = admin.id
+    ret.admin_note = payload.admin_note or ret.admin_note
+    db.add(OrderStatusHistory(
+        order_id=order.id, status=order.status, admin_id=admin.id,
+        description=payload.admin_note or f"Return {action.replace('_', ' ')}",
+    ))
+    db.commit()
+    return {"message": "Return updated.", "return_status": ret.status, "order_status": order.status}
 
 
 @router.post("/{order_uuid}/fulfill")

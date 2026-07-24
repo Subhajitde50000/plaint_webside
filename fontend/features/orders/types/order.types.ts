@@ -128,8 +128,10 @@ export interface CancelOrderPayload {
 
 export interface ReturnOrderPayload {
   reason: string;
-  return_type?: string; // "refund" | "exchange"
+  return_type?: string; // "refund" | "replacement" | "exchange"
   customer_note?: string;
+  items?: { order_item_id: number; quantity: number; reason?: string }[];
+  evidence_urls?: string[];
 }
 
 // ─── Utility: cancellable and returnable statuses ────────────────────────────
@@ -139,7 +141,7 @@ export const CANCELLABLE_STATUSES: OrderStatus[] = [
   "picking", "quality_check", "processing", "packed", "ready_for_dispatch",
   "courier_assigned", "picked_up",
 ];
-export const RETURNABLE_STATUSES: OrderStatus[] = ["delivered"];
+export const RETURNABLE_STATUSES: OrderStatus[] = ["delivered", "completed"];
 export const TRANSIT_STATUSES: OrderStatus[] = ["shipped", "out_for_delivery"];
 
 // ─── Human-readable status labels & colours ──────────────────────────────────

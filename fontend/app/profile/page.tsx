@@ -716,6 +716,7 @@ function getStatusStyle(status: string) {
     case "delivered": return { cls: "order-status-delivered", icon: "✓", label: "Delivered" };
     case "processing": return { cls: "order-status-processing", icon: "⏳", label: "Processing" };
     case "shipped": return { cls: "order-status-shipped", icon: "🚚", label: "Shipped" };
+    case "return_requested": return { cls: "order-status-returned", icon: "↩", label: "Return Requested" };
     case "refund_pending": return { cls: "order-status-processing", icon: "💰", label: "Refund Processing" };
     case "refunded": return { cls: "order-status-delivered", icon: "✓", label: "Refunded" };
     case "cancelled": return { cls: "order-status-cancelled", icon: "✕", label: "Cancelled" };
@@ -933,6 +934,7 @@ function OverviewSection({
 ───────────────────────────────────────────── */
 function normalizeOrderStatus(status: string): string {
   if (["cancelled", "cancelled_by_customer", "cancelled_by_admin"].includes(status)) return "cancelled";
+  if (["return_requested", "return_approved", "return_pickup_scheduled", "return_received", "return_inspection"].includes(status)) return "return_requested";
   if (status === "refund_pending") return "refund_pending";
   if (status === "refunded") return "refunded";
   if (status === "return_received") return "returned";

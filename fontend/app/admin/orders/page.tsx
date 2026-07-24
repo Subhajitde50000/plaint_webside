@@ -13,6 +13,7 @@ import {
   useAdminAnalyticsOverview,
   useAssignCourier,
   useUpdateOrderStatus,
+  useUpdateReturn,
   useAddOrderTag,
   useDeleteOrderTag
 } from "@/features/admin/hooks/useAdminOrders";
@@ -667,6 +668,7 @@ function OrderDetailPanel({
   const [isAddingTag, setIsAddingTag] = useState(initialAddTagOpen);
   const [tagInput, setTagInput] = useState("");
   const [nextStatus, setNextStatus] = useState("");
+  const [returnNote, setReturnNote] = useState("");
 
   // Sync with initial props when they change
   useEffect(() => {
@@ -699,6 +701,7 @@ function OrderDetailPanel({
   const deleteNoteMutation = useDeleteOrderNote(orderSummary.uuid);
   const assignCourierMutation = useAssignCourier(orderSummary.uuid);
   const statusMutation = useUpdateOrderStatus(orderSummary.uuid);
+  const returnMutation = useUpdateReturn(orderSummary.uuid);
   const addTagMutation = useAddOrderTag(orderSummary.uuid);
   const deleteTagMutation = useDeleteOrderTag(orderSummary.uuid);
 
@@ -749,6 +752,29 @@ function OrderDetailPanel({
   const fSt = FULFILMENT_STYLE[mapFulfilmentStatus(order.fulfillment_status, order.status)];
   const pSt = PAYMENT_STYLE[mapPaymentStatus(order.payment_status)];
   const recommendedStatuses = recommendedWorkflowStatuses(order.status, order.payment_status, order.payment_gateway);
+  const returnCase = Array.isArray(order.returns) ? order.returns[0] : null;
+  let returnEvidence: string[] = [];
+  try {
+    returnEvidence = returnCase?.evidence_urls ? JSON.parse(returnCase.evidence_urls) : [];
+  } catch {
+    returnEvidence = [];
+  }
+  const returnAction = (action: string, requiresReason = false) => {
+    if (requiresReason && !returnNote.trim()) {
+      onToast("Enter a reason before rejecting this return.");
+      return;
+    }
+    returnMutation.mutate(
+      { action, adminNote: returnNote.trim() || undefined },
+      {
+        onSuccess: () => {
+          setReturnNote("");
+          onToast("Return case updated.");
+        },
+        onError: (err: any) => onToast(err.response?.data?.detail || "Could not update return case.")
+      }
+    );
+  };
 
   const timeline: Array<{ stage: string; description?: string; time: string; loc: string; done: boolean; active: boolean }> = (order.status_history || []).map((h: any) => ({
     stage: h.status.replace(/_/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase()),
@@ -895,6 +921,36 @@ function OrderDetailPanel({
                 <div style={{ fontSize:"15px", fontWeight:600, color:T.text, marginBottom:"20px" }}>
                   Order Workflow
                 </div>
+                {returnCase && (
+                  <div style={{ marginBottom:"18px", padding:"14px", borderRadius:"7px", border:`1px solid ${T.returned}55`, background:T.returnedBg }}>
+                    <div style={{ display:"flex", justifyContent:"space-between", gap:"12px", alignItems:"center", marginBottom:"10px" }}>
+                      <strong style={{ color:T.text }}>Return case</strong>
+                      <Badge bg={T.returnedBg} color={T.returned}>{returnCase.status.replace(/_/g, " ")}</Badge>
+                    </div>
+                    <div style={{ display:"grid", gridTemplateColumns:"repeat(2, minmax(0, 1fr))", gap:"8px", fontSize:"12px", color:T.text }}>
+                      <div><span style={{ color:T.textMuted }}>Reason: </span>{returnCase.reason.replace(/_/g, " ")}</div>
+                      <div><span style={{ color:T.textMuted }}>Resolution: </span>{returnCase.return_type}</div>
+                    </div>
+                    {returnCase.customer_note && <div style={{ marginTop:"9px", fontSize:"12px", color:T.text }}><span style={{ color:T.textMuted }}>Customer note: </span>{returnCase.customer_note}</div>}
+                    {returnCase.admin_note && <div style={{ marginTop:"6px", fontSize:"12px", color:T.text }}><span style={{ color:T.textMuted }}>Admin note: </span>{returnCase.admin_note}</div>}
+                    {returnCase.items?.length > 0 && <div style={{ marginTop:"9px", fontSize:"12px", color:T.textMuted }}>Items: {returnCase.items.map((item: any) => `${item.order_item?.title || `Item #${item.order_item_id}`} × ${item.quantity}`).join(", ")}</div>}
+                    {returnEvidence.length > 0 && <div style={{ marginTop:"9px", display:"flex", gap:"8px", flexWrap:"wrap" }}>{returnEvidence.map((url, index) => <a key={url + index} href={url} target="_blank" rel="noreferrer" style={{ color:T.accent, fontSize:"12px" }}>View evidence {index + 1}</a>)}</div>}
+                    {!["rejected", "refunded", "completed", "replacement_created"].includes(returnCase.status) && (
+                      <>
+                        <textarea value={returnNote} onChange={e => setReturnNote(e.target.value)} placeholder="Admin note (required when rejecting)" rows={2}
+                          style={{ width:"100%", marginTop:"12px", padding:"8px", resize:"vertical", background:T.inputBg, color:T.text, border:`1px solid ${T.border}`, borderRadius:"5px", fontSize:"12px" }} />
+                        <div style={{ display:"flex", gap:"8px", flexWrap:"wrap", marginTop:"8px" }}>
+                          {returnCase.status === "requested" && <><Btn size="sm" variant="primary" disabled={returnMutation.isPending} onClick={() => returnAction("approve")}>Approve</Btn><Btn size="sm" variant="danger" disabled={returnMutation.isPending} onClick={() => returnAction("reject", true)}>Reject</Btn></>}
+                          {returnCase.status === "approved" && <Btn size="sm" variant="primary" disabled={returnMutation.isPending} onClick={() => returnAction("schedule_pickup")}>Schedule pickup</Btn>}
+                          {returnCase.status === "pickup_scheduled" && <Btn size="sm" variant="primary" disabled={returnMutation.isPending} onClick={() => returnAction("picked_up")}>Mark picked up</Btn>}
+                          {returnCase.status === "picked_up" && <Btn size="sm" variant="primary" disabled={returnMutation.isPending} onClick={() => returnAction("received")}>Mark received</Btn>}
+                          {returnCase.status === "received" && <><Btn size="sm" variant="primary" disabled={returnMutation.isPending} onClick={() => returnAction("inspect_passed")}>QC passed</Btn><Btn size="sm" variant="danger" disabled={returnMutation.isPending} onClick={() => returnAction("inspect_failed", true)}>QC failed</Btn></>}
+                          {returnCase.status === "inspection" && (returnCase.return_type === "refund" ? <Btn size="sm" variant="primary" disabled={returnMutation.isPending} onClick={() => returnAction("refund")}>Process refund</Btn> : <Btn size="sm" variant="primary" disabled={returnMutation.isPending} onClick={() => returnAction(returnCase.return_type)}>Create {returnCase.return_type}</Btn>)}
+                        </div>
+                      </>
+                    )}
+                  </div>
+                )}
                 <div style={{ display:"flex", gap:"8px", alignItems:"center", marginBottom:"18px", padding:"10px", background:T.inputBg, borderRadius:"6px" }}>
                   <select aria-label="Update order workflow status" value={nextStatus} onChange={e=>setNextStatus(e.target.value)}
                     style={{ flex:1, padding:"8px", background:T.cardBg, color:T.text, border:`1px solid ${T.border}`, borderRadius:"5px", fontSize:"12px" }}>
@@ -1250,6 +1306,36 @@ function OrderDetailPanel({
             {/* Manage Order Actions */}
             <SideCard title="Manage Order">
               <div style={{ display:"flex", flexDirection:"column", gap:"8px" }}>
+                {/* Quick workflow actions based on recommended next statuses */}
+                {recommendedStatuses && recommendedStatuses.length > 0 && (
+                  <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                    {recommendedStatuses.map(rs => {
+                      const label = WORKFLOW_STATUS_LABELS[rs] || rs.replace(/_/g, " ");
+                      const isDanger = /cancel|refund|reject/.test(rs);
+                      return (
+                        <Btn key={rs}
+                          variant={isDanger ? "danger" : "primary"}
+                          size="xs"
+                          fullWidth
+                          onClick={() => {
+                            if (rs === "shipped" && (!order.shipping_carrier || !order.tracking_number)) {
+                              onToast("Save carrier and tracking number in Shipment Details before marking shipped.");
+                              setTab("fulfil");
+                              return;
+                            }
+                            statusMutation.mutate(
+                              { status: rs },
+                              { onSuccess: () => { onToast(`${label} applied.`); }, onError: (err: any) => onToast(err.response?.data?.detail || "Could not update status.") }
+                            );
+                          }}
+                        >
+                          {label}
+                        </Btn>
+                      );
+                    })}
+                  </div>
+                )}
+
                 {/* Edit Order */}
                 <Btn variant="secondary" size="xs" fullWidth onClick={() => onToast("Edit Order — Opening editor…")}>
                   ✏️ Edit Order

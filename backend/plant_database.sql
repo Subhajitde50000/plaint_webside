@@ -555,13 +555,15 @@ CREATE TABLE IF NOT EXISTS  returns (
     id              BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     order_id        BIGINT UNSIGNED NOT NULL,
     reason          ENUM(
-                        'damaged_in_transit','wrong_item','changed_mind',
-                        'quality_issue','other'
+                        'damaged_product','dead_plant','wrong_product','missing_item',
+                        'poor_quality','size_issue','changed_mind','other',
+                        'damaged_in_transit','wrong_item','quality_issue'
                     ) NOT NULL,
-    return_type     ENUM('refund','exchange','store_credit') DEFAULT 'refund',
-    status          ENUM('requested','approved','rejected','in_transit','received','refund_issued') DEFAULT 'requested',
+    return_type     ENUM('refund','replacement','exchange','store_credit') DEFAULT 'refund',
+    status          ENUM('requested','approved','rejected','pickup_scheduled','picked_up','received','inspection','refund_pending','refunded','replacement_created','completed','in_transit','refund_issued') DEFAULT 'requested',
     customer_note   TEXT,
     admin_note      TEXT,
+    evidence_urls   TEXT,
     return_tracking VARCHAR(100),
     processed_by    BIGINT UNSIGNED,
     created_at      DATETIME DEFAULT CURRENT_TIMESTAMP,

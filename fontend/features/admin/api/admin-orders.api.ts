@@ -144,6 +144,18 @@ export const updateOrderStatusApi = async (
   return res.data;
 };
 
+export const updateReturnApi = async (
+  orderUuid: string,
+  data: { action: string; adminNote?: string; pickupRequired?: boolean }
+) => {
+  const res = await adminApi.post(`/admin/orders/${orderUuid}/return`, {
+    action: data.action,
+    admin_note: data.adminNote || undefined,
+    pickup_required: data.pickupRequired ?? true,
+  });
+  return res.data;
+};
+
 export const addOrderTagApi = async (orderUuid: string, tag: string) => {
   const res = await adminApi.post(`/admin/orders/${orderUuid}/tags`, {
     tag,

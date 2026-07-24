@@ -1,10 +1,11 @@
 import uuid
+import json
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.dependencies import get_current_user
-from app.models.order import Order, OrderStatusHistory, Return, Refund
+from app.models.order import Order, OrderStatusHistory, Return, ReturnItem, Refund
 from app.models.user import User
 from app.schemas.order import (
     CreateOrderRequest, VerifyPaymentRequest, CancelOrderRequest, ReturnRequest
@@ -334,16 +335,54 @@ async def request_return(
     ).first()
     if not order:
         raise HTTPException(status_code=404, detail="Order not found.")
-    if order.status != "delivered":
+    if order.status not in {"delivered", "completed"}:
         raise HTTPException(status_code=400, detail="Only delivered orders can be returned.")
+    delivered_at = order.delivered_at or order.updated_at
+    if delivered_at and delivered_at.tzinfo is None:
+        delivered_at = delivered_at.replace(tzinfo=timezone.utc)
+    if delivered_at and (datetime.now(timezone.utc) - delivered_at).total_seconds() > 7 * 24 * 60 * 60:
+        raise HTTPException(status_code=400, detail="The 7-day return window has closed.")
+    if db.query(Return).filter(Return.order_id == order.id, Return.status.notin_(["rejected", "completed", "refunded"])).first():
+        raise HTTPException(status_code=400, detail="A return request is already active for this order.")
+
+    reason_map = {
+        "damaged product": "damaged_product", "dead plant": "dead_plant",
+        "wrong product": "wrong_product", "wrong item received": "wrong_product",
+        "missing item": "missing_item", "poor quality": "poor_quality",
+        "quality issue": "poor_quality", "size issue": "size_issue",
+        "changed mind": "changed_mind", "other": "other",
+    }
+    reason = reason_map.get(payload.reason.strip().lower())
+    if not reason:
+        raise HTTPException(status_code=400, detail="Select a valid return reason.")
+    if payload.return_type not in {"refund", "replacement", "exchange"}:
+        raise HTTPException(status_code=400, detail="Select refund, replacement, or exchange.")
+
+    requested_items = payload.items or [
+        {"order_item_id": item.id, "quantity": item.quantity, "reason": payload.reason}
+        for item in order.items
+    ]
+    order_items = {item.id: item for item in order.items}
+    for item in requested_items:
+        item_id = item.order_item_id if hasattr(item, "order_item_id") else item["order_item_id"]
+        quantity = item.quantity if hasattr(item, "quantity") else item["quantity"]
+        if item_id not in order_items or quantity < 1 or quantity > order_items[item_id].quantity:
+            raise HTTPException(status_code=400, detail="One or more selected return items are invalid.")
 
     ret = Return(
         order_id=order.id,
-        reason=payload.reason,
+        reason=reason,
         return_type=payload.return_type,
         customer_note=payload.customer_note,
+        evidence_urls=json.dumps(payload.evidence_urls),
     )
     db.add(ret)
+    db.flush()
+    for item in requested_items:
+        item_id = item.order_item_id if hasattr(item, "order_item_id") else item["order_item_id"]
+        quantity = item.quantity if hasattr(item, "quantity") else item["quantity"]
+        item_reason = item.reason if hasattr(item, "reason") else item.get("reason")
+        db.add(ReturnItem(return_id=ret.id, order_item_id=item_id, quantity=quantity, reason=item_reason))
     order.status = "return_requested"
     db.add(OrderStatusHistory(
         order_id=order.id,

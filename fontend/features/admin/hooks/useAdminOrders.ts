@@ -117,6 +117,18 @@ export function useUpdateOrderStatus(orderUuid: string) {
   });
 }
 
+export function useUpdateReturn(orderUuid: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: Parameters<typeof api.updateReturnApi>[1]) =>
+      api.updateReturnApi(orderUuid, data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-order", orderUuid] });
+      qc.invalidateQueries({ queryKey: ["admin-orders"] });
+    },
+  });
+}
+
 export function useAddOrderTag(orderUuid: string) {
   const qc = useQueryClient();
   return useMutation({

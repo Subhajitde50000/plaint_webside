@@ -146,6 +146,32 @@ class AdminOrderListResponse(BaseModel):
     page_size: int
 
 
+class ReturnItemResponseSchema(BaseModel):
+    id: int
+    order_item_id: int
+    quantity: int
+    reason: Optional[str] = None
+    order_item: Optional[OrderItemSchema] = None
+
+    model_config = {"from_attributes": True}
+
+
+class ReturnResponseSchema(BaseModel):
+    id: int
+    reason: str
+    return_type: str
+    status: str
+    customer_note: Optional[str] = None
+    admin_note: Optional[str] = None
+    evidence_urls: Optional[str] = None
+    return_tracking: Optional[str] = None
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+    items: List[ReturnItemResponseSchema] = []
+
+    model_config = {"from_attributes": True}
+
+
 class AdminOrderDetailResponse(OrderResponse):
     ip_address: Optional[str] = None
     user_agent: Optional[str] = None
@@ -155,6 +181,7 @@ class AdminOrderDetailResponse(OrderResponse):
     shiprocket_order_id: Optional[str] = None
     awb_code: Optional[str] = None
     notes_list: List[OrderNoteResponseSchema] = []
+    returns: List[ReturnResponseSchema] = []
 
     model_config = {"from_attributes": True}
 
@@ -167,6 +194,20 @@ class ReturnRequest(BaseModel):
     reason: str
     return_type: str = "refund"
     customer_note: Optional[str] = None
+    items: List["ReturnItemRequest"] = []
+    evidence_urls: List[str] = []
+
+
+class ReturnItemRequest(BaseModel):
+    order_item_id: int
+    quantity: int = 1
+    reason: Optional[str] = None
+
+
+class AdminReturnUpdateRequest(BaseModel):
+    action: str  # approve, reject, schedule_pickup, picked_up, received, inspect_passed, inspect_failed, refund
+    admin_note: Optional[str] = None
+    pickup_required: bool = True
 
 
 class RefundRequest(BaseModel):

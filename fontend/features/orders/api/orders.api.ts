@@ -52,7 +52,7 @@ export const cancelOrderApi = async (orderUuid: string, reason: string) => {
 
 export const returnOrderApi = async (
   orderUuid: string,
-  payload: { reason: string; return_type?: string; customer_note?: string }
+  payload: { reason: string; return_type?: string; customer_note?: string; items?: { order_item_id: number; quantity: number; reason?: string }[]; evidence_urls?: string[] }
 ) => {
   const res = await api.post(`/orders/${orderUuid}/return`, payload);
   return res.data;
