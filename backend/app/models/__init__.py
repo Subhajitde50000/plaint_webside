@@ -22,6 +22,7 @@ from app.models.garden_service import GardenServiceType, GardenBooking, Gardener
 from app.models.ai_care import AICareSession, AICareMessage, AICareProductSuggestion
 from app.models.plant import UserPlant, PlantCareLog
 from app.models.analytics import AnalyticsDaily, NotificationPreference, ActivityLog, PaymentMethod
+from app.models.customer_note import CustomerNote
 
 __all__ = [
     "User", "UserSocialAccount", "VerificationToken", "RefreshToken",
@@ -41,4 +42,5 @@ __all__ = [
     "AICareSession", "AICareMessage", "AICareProductSuggestion",
     "UserPlant", "PlantCareLog",
     "AnalyticsDaily", "NotificationPreference", "ActivityLog", "PaymentMethod",
+    "CustomerNote",
 ]

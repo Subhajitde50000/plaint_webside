@@ -6,3 +6,4 @@ backend_file_stacher.txt
 __pycache__
 test.ipynb
 .vscode
+.pytest_cache

@@ -1,4 +1,4 @@
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, Field
 from typing import Optional, List
 from decimal import Decimal
 from datetime import datetime
@@ -89,3 +89,11 @@ class AdminCustomerDetail(CustomerProfile):
     deleted_at: Optional[datetime] = None
 
     model_config = {"from_attributes": True}
+
+
+class CustomerBlockRequest(BaseModel):
+    reason: str = Field(min_length=3, max_length=500)
+
+
+class CustomerNoteRequest(BaseModel):
+    note: str = Field(min_length=1, max_length=5000)

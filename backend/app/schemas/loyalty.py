@@ -1,5 +1,5 @@
-from pydantic import BaseModel
-from typing import Optional, List
+from pydantic import BaseModel, Field
+from typing import Literal, Optional, List
 from datetime import datetime
 
 
@@ -37,9 +37,9 @@ class WishlistItemSchema(BaseModel):
 
 
 class AdjustPointsRequest(BaseModel):
-    points: int
-    reason: str
+    points: int = Field(ge=-100_000, le=100_000)
+    reason: str = Field(min_length=3, max_length=255)
 
 
 class AdminSetTierRequest(BaseModel):
-    tier: str  # plant_lover | silver | gold
+    tier: Literal["plant_lover", "silver", "gold"]

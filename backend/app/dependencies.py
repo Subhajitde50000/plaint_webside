@@ -99,6 +99,7 @@ def require_role(*roles: str):
 require_super_admin = require_role("super_admin")
 require_ops_or_above = require_role("super_admin", "operations_manager")
 require_support_or_above = require_role("super_admin", "operations_manager", "customer_support")
+require_customer_list = require_role("super_admin", "operations_manager", "customer_support", "marketing")
 require_marketing = require_role("super_admin", "operations_manager", "marketing")
 require_inventory = require_role("super_admin", "operations_manager", "inventory_manager")
 require_analyst = require_role("super_admin", "operations_manager", "marketing", "analyst")

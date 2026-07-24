@@ -3,7 +3,8 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { MOCK_CUSTOMERS, Customer, CustomerTier, CustomerStatus, Order, Review, AICareQuery, GardenBooking, ActivityEntry, AdminNote, RecentlyViewedItem, SearchEntry, CartItem } from "../data";
+import { customerFromApi, Customer, CustomerTier, CustomerStatus, Order, Review, AICareQuery, GardenBooking, ActivityEntry, AdminNote, RecentlyViewedItem, SearchEntry, CartItem } from "../data";
+import { useAddCustomerNote, useAdjustPoints, useAdminCustomer, useBlockCustomer, useCustomerOrders } from "@/features/admin-customers";
 
 /* ─── tokens ─────────────────────────────────────────────────────────────── */
 const T = {
@@ -150,7 +151,7 @@ function Modal({ title, onClose, children }: { title: string; onClose: () => voi
   );
 }
 
-function AdjustPointsModal({ customer, onClose }: { customer: Customer; onClose: () => void }) {
+function AdjustPointsModal({ customer, onClose, onApply }: { customer: Customer; onClose: () => void; onApply: (points: number, reason: string) => void }) {
   const [action, setAction] = useState<"add" | "deduct">("add");
   const [points, setPoints] = useState("");
   const [reason, setReason] = useState("");
@@ -212,7 +213,7 @@ function AdjustPointsModal({ customer, onClose }: { customer: Customer; onClose:
               border: "none", color: (!points || !reason) ? T.muted : "#fff",
               fontSize: 13, fontWeight: 700, cursor: (!points || !reason) ? "not-allowed" : "pointer",
             }}
-          >Apply Adjustment</button>
+          onClick={() => onApply(action === "add" ? numPoints : -numPoints, reason)}>Apply Adjustment</button>
         </div>
       </div>
     </Modal>
@@ -258,7 +259,7 @@ function SendEmailModal({ customer, onClose }: { customer: Customer; onClose: ()
   );
 }
 
-function BlockModal({ customer, onClose }: { customer: Customer; onClose: () => void }) {
+function BlockModal({ customer, onClose, onBlock }: { customer: Customer; onClose: () => void; onBlock: (reason: string) => void }) {
   const [reason, setReason] = useState("");
   return (
     <Modal title={`Block ${customer.firstName} ${customer.lastName}'s account?`} onClose={onClose}>
@@ -280,14 +281,14 @@ function BlockModal({ customer, onClose }: { customer: Customer; onClose: () => 
             background: !reason ? T.elevated : T.error,
             border: "none", color: !reason ? T.muted : "#fff",
             fontSize: 13, fontWeight: 700, cursor: !reason ? "not-allowed" : "pointer",
-          }}>Block Account</button>
+          }} onClick={() => onBlock(reason)}>Block Account</button>
         </div>
       </div>
     </Modal>
   );
 }
 
-function AddNoteModal({ onClose }: { onClose: () => void }) {
+function AddNoteModal({ onClose, onAdd }: { onClose: () => void; onAdd: (note: string) => void }) {
   const [text, setText] = useState("");
   return (
     <Modal title="Add Admin Note" onClose={onClose}>
@@ -305,7 +306,7 @@ function AddNoteModal({ onClose }: { onClose: () => void }) {
             background: !text ? T.elevated : T.accent,
             border: "none", color: !text ? T.muted : "#fff",
             fontSize: 13, fontWeight: 700, cursor: !text ? "not-allowed" : "pointer",
-          }}>Save Note</button>
+          }} onClick={() => onAdd(text)}>Save Note</button>
         </div>
       </div>
     </Modal>
@@ -316,9 +317,10 @@ function AddNoteModal({ onClose }: { onClose: () => void }) {
 
 function TabOverview({ c }: { c: Customer }) {
   const [adjustOpen, setAdjustOpen] = useState(false);
+  const adjustPoints = useAdjustPoints(c.id);
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
-      {adjustOpen && <AdjustPointsModal customer={c} onClose={() => setAdjustOpen(false)} />}
+      {adjustOpen && <AdjustPointsModal customer={c} onClose={() => setAdjustOpen(false)} onApply={(points, reason) => adjustPoints.mutate({ points, reason }, { onSuccess: () => setAdjustOpen(false) })} />}
       {/* Quick Stats */}
       <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
         {[
@@ -814,13 +816,14 @@ function ProfileCard({ c, onEmailClick }: { c: Customer; onEmailClick: () => voi
 function LoyaltyCard({ c }: { c: Customer }) {
   const [adjustOpen, setAdjustOpen] = useState(false);
   const [tierOpen, setTierOpen] = useState(false);
+  const adjustPoints = useAdjustPoints(c.id);
   const tier = tierConfig(c.tier);
   const totalForNext = c.loyaltyPoints + c.loyaltyPointsToNext;
   const pct = totalForNext > 0 ? Math.round((c.loyaltyPoints / totalForNext) * 100) : 100;
 
   return (
     <Card>
-      {adjustOpen && <AdjustPointsModal customer={c} onClose={() => setAdjustOpen(false)} />}
+      {adjustOpen && <AdjustPointsModal customer={c} onClose={() => setAdjustOpen(false)} onApply={(points, reason) => adjustPoints.mutate({ points, reason }, { onSuccess: () => setAdjustOpen(false) })} />}
       {tierOpen && (
         <Modal title="Change Tier" onClose={() => setTierOpen(false)}>
           <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
@@ -1028,12 +1031,13 @@ function TagsCard({ c }: { c: Customer }) {
 }
 
 function AdminNotesCard({ c }: { c: Customer }) {
-  const [notes, setNotes] = useState<AdminNote[]>(c.adminNotes);
   const [addOpen, setAddOpen] = useState(false);
+  const addNote = useAddCustomerNote(c.id);
+  const notes = c.adminNotes;
 
   return (
     <Card>
-      {addOpen && <AddNoteModal onClose={() => setAddOpen(false)} />}
+      {addOpen && <AddNoteModal onClose={() => setAddOpen(false)} onAdd={(note) => addNote.mutate(note, { onSuccess: () => setAddOpen(false) })} />}
       <CardHeader title="Admin Notes" action={
         <button onClick={() => setAddOpen(true)} style={{ fontSize: 12, color: T.accent, background: "none", border: "none", cursor: "pointer", fontWeight: 700 }}>+ Add Note</button>
       } />
@@ -1052,7 +1056,6 @@ function AdminNotesCard({ c }: { c: Customer }) {
                   </div>
                   <div style={{ display: "flex", gap: 6 }}>
                     <button style={{ fontSize: 11, color: T.muted, background: "none", border: "none", cursor: "pointer" }}>Edit</button>
-                    <button onClick={() => setNotes(prev => prev.filter(no => no.id !== n.id))} style={{ fontSize: 11, color: T.error, background: "none", border: "none", cursor: "pointer" }}>Delete</button>
                   </div>
                 </div>
                 <p style={{ margin: 0, fontSize: 13, color: T.text, lineHeight: 1.5 }}>{n.text}</p>
@@ -1079,19 +1082,25 @@ const TABS: { key: Tab; label: (c: Customer) => string }[] = [
 export default function CustomerDetailPage() {
   const params = useParams();
   const id = params?.id as string;
-
-  const customer = MOCK_CUSTOMERS.find(c => c.id === id);
+  const { data: customerData, isLoading, isError } = useAdminCustomer(id);
+  const { data: ordersData } = useCustomerOrders(id);
+  const blockCustomer = useBlockCustomer(id);
+  const customer = customerData ? customerFromApi(customerData, ordersData?.items ?? []) : undefined;
 
   const [tab, setTab]           = useState<Tab>("overview");
   const [emailOpen, setEmailOpen] = useState(false);
   const [blockOpen, setBlockOpen] = useState(false);
   const [overflowOpen, setOverflowOpen] = useState(false);
 
+  if (isLoading) {
+    return <div style={{ padding: "80px 24px", textAlign: "center", color: T.muted }}>Loading customer…</div>;
+  }
+
   if (!customer) {
     return (
       <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "80px 24px", gap: 16 }}>
         <div style={{ fontSize: 48 }}>👤</div>
-        <div style={{ fontSize: 18, fontWeight: 600, color: T.text }}>Customer not found</div>
+        <div style={{ fontSize: 18, fontWeight: 600, color: T.text }}>{isError ? "Customer could not be loaded" : "Customer not found"}</div>
         <Link href="/admin/customers" style={{ color: T.accent, textDecoration: "none", fontSize: 14 }}>← Back to Customers</Link>
       </div>
     );
@@ -1102,7 +1111,7 @@ export default function CustomerDetailPage() {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
       {emailOpen && <SendEmailModal customer={customer} onClose={() => setEmailOpen(false)} />}
-      {blockOpen && <BlockModal customer={customer} onClose={() => setBlockOpen(false)} />}
+      {blockOpen && <BlockModal customer={customer} onClose={() => setBlockOpen(false)} onBlock={(reason) => blockCustomer.mutate(reason, { onSuccess: () => setBlockOpen(false) })} />}
 
       {/* Breadcrumb */}
       <nav aria-label="Breadcrumb" style={{ fontSize: 12, color: T.muted, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
