@@ -617,7 +617,11 @@ export default function ProductDetailPage({ params }: PageProps) {
       images,
       pots,
       careGuide,
-      relatedProducts: related.length > 0 ? related : MOCK_RELATED_PRODUCTS
+      relatedProducts: related.length > 0 ? related : MOCK_RELATED_PRODUCTS,
+      deliveryEta: product.delivery_eta_label || '3–5 business days',
+      healthGuarantee: product.health_guarantee_label || '7-day health guarantee',
+      packagingLabel: product.packaging_label || 'Eco-friendly packaging',
+      freeDelivery: product.free_delivery_eligible !== false,
     };
   }, [product, relatedData]);
 
@@ -1358,9 +1362,9 @@ export default function ProductDetailPage({ params }: PageProps) {
               display: "flex", flexDirection: "column", gap: "10px",
             }}>
               {[
-                { icon: <TruckIcon />, label: "Free Delivery", desc: "Estimated in 3–5 business days" },
-                { icon: <RefreshIcon />, label: "7-Day Health Guarantee", desc: "Unhappy? Return within 7 days, no questions" },
-                { icon: <PackageIcon />, label: "Eco Packaging", desc: "100% sustainable, plant-safe materials" },
+                { icon: <TruckIcon />, label: p.freeDelivery ? "Free Delivery" : "Delivery", desc: p.deliveryEta },
+                { icon: <RefreshIcon />, label: "Health Guarantee", desc: p.healthGuarantee },
+                { icon: <PackageIcon />, label: "Packaging", desc: p.packagingLabel },
               ].map((row) => (
                 <div key={row.label} style={{ display: "flex", alignItems: "flex-start", gap: "12px" }}>
                   <span style={{ color: "var(--color-green-mid)", flexShrink: 0, marginTop: "1px" }}>{row.icon}</span>

@@ -441,8 +441,11 @@ function CheckoutContent() {
     (!appliedCoupon && cart?.automatic_discount?.free_shipping);
 
   const shippingFee = isFreeShipping || postDiscountSubtotal >= 999 || items.length === 0 ? 0 : 99.00;
-  const taxAmount = postDiscountSubtotal * 0.08;
-  const total = postDiscountSubtotal + shippingFee + taxAmount;
+  // GST is included in product prices (standard Indian GST 18%).
+  // We extract it from the post-discount subtotal: tax = price × rate / (100 + rate)
+  const GST_RATE = 18;
+  const taxAmount = postDiscountSubtotal * GST_RATE / (100 + GST_RATE);
+  const total = postDiscountSubtotal + shippingFee;
   const orderNumber = useRef("");
 
   // Check if current coupon blocks loyalty points (20%+, BOGO, Flash Sale)
@@ -501,7 +504,7 @@ function CheckoutContent() {
       setLoyaltyError("Green Points cannot be combined with 20%+ coupons, BOGO, or Flash Sales.");
       return;
     }
-    const totalBeforePoints = postCouponSubtotal + shippingFee + taxAmount;
+    const totalBeforePoints = postCouponSubtotal + shippingFee;
     const maxDiscountForMinPayable = Math.max(0, totalBeforePoints - 10.00);
     const maxAllowedDiscount = Math.min(postCouponSubtotal * 0.5, maxDiscountForMinPayable);
     const maxAllowedPoints = Math.min(availablePoints, Math.floor(maxAllowedDiscount / pointValueInr));
@@ -1768,7 +1771,7 @@ function CheckoutContent() {
                 </div>
 
                 <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, color: T.body }}>
-                  <span>Tax (8%)</span>
+                  <span>GST (18%, incl.)</span>
                   <span style={{ fontWeight: 500 }}>₹{taxAmount.toFixed(2)}</span>
                 </div>
               </div>
@@ -1846,7 +1849,7 @@ function CheckoutContent() {
                 <span>{shippingFee === 0 ? <span style={{ color: T.green }}>Free</span> : `₹${shippingFee.toFixed(2)}`}</span>
               </div>
               <div style={{ display: "flex", justifyContent: "space-between", fontSize: "12px", color: T.muted }}>
-                <span>Tax (8%)</span>
+                <span>GST (18%, incl.)</span>
                 <span>₹{taxAmount.toFixed(2)}</span>
               </div>
             </div>
