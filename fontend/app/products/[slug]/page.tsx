@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useCallback, use, useMemo } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import SharedNavbar from "@/components/Navbar";
+import PdpSkeleton, { ReviewSkeleton } from "@/components/pdp/PdpSkeleton";
 import { useProduct } from "@/features/products/hooks/useProduct";
 import { useProducts } from "@/features/products/hooks/useProducts";
 import { useCart } from "@/features/cart/hooks/useCart";
@@ -694,14 +695,7 @@ export default function ProductDetailPage({ params }: PageProps) {
   }, [selectedSize, size, qty]);
 
   if (isLoading) {
-    return (
-      <>
-        <SharedNavbar />
-        <div style={{ display: "flex", justifyContent: "center", alignItems: "center", minHeight: "100vh", fontFamily: "Poppins, sans-serif", fontSize: 16 }}>
-          Loading product details...
-        </div>
-      </>
-    );
+    return <PdpSkeleton />;
   }
 
   if (isError || !p) {
@@ -1604,7 +1598,11 @@ export default function ProductDetailPage({ params }: PageProps) {
               {/* Review Cards */}
               <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
                 {isReviewsLoading ? (
-                  <p style={{ textAlign: "center", padding: "32px", color: "var(--color-text-secondary)", fontFamily: "DM Sans" }}>Loading reviews...</p>
+                  <>
+                    <ReviewSkeleton />
+                    <ReviewSkeleton />
+                    <ReviewSkeleton />
+                  </>
                 ) : !reviewsData?.items || reviewsData.items.length === 0 ? (
                   <div style={{ background: "white", padding: "40px", borderRadius: "var(--radius-lg)", textAlign: "center" }}>
                     <p style={{ fontFamily: "Poppins", fontWeight: 600, fontSize: "16px", color: "var(--color-text-primary)", marginBottom: "4px" }}>No reviews match your filters yet</p>
