@@ -92,10 +92,26 @@ export const createProductApi = async (data: Record<string, any>) => {
     common_name: data.commonName || data.common_name || "",
     base_price: Number(data.currentPrice ?? data.basePrice ?? data.base_price ?? 0),
     compare_at_price: (data.compareAtPrice ?? data.compare_at_price) ? Number(data.compareAtPrice ?? data.compare_at_price) : null,
-    cost_price: (data.costPrice ?? data.cost_price) ? Number(data.costPrice ?? data.cost_price) : null,
-    care_skill: normalizeCareSkill(data.careSkill ?? data.care_skill),
-    is_pet_friendly: Boolean(data.isPetFriendly ?? data.is_pet_friendly ?? false),
-    is_air_purifying: Boolean(data.isAirPurifying ?? data.is_air_purifying ?? false),
+    cost_price: (data.costPrice ?? data.costPerUnit ?? data.cost_price) ? Number(data.costPrice ?? data.costPerUnit ?? data.cost_price) : null,
+    price_note: data.priceNote || data.price_note || null,
+    is_taxable: data.isTaxable ?? data.is_taxable ?? true,
+    tax_rate: data.taxRate ? parseFloat(String(data.taxRate).replace(/[^0-9.]/g, '')) : 18.00,
+    care_light: data.careLight || data.lightRequirement || data.care_light || null,
+    care_water: data.careWater || data.waterFrequency || data.care_water || null,
+    care_temperature: data.careTemperature || data.temperatureRange || data.care_temperature || null,
+    care_skill: normalizeCareSkill(data.careSkill ?? data.skillLevel ?? data.care_skill),
+    is_pet_friendly: Boolean(data.isPetFriendly ?? data.petFriendly ?? data.is_pet_friendly ?? false),
+    is_air_purifying: Boolean(data.isAirPurifying ?? data.airPurifying ?? data.is_air_purifying ?? false),
+    delivery_eta_label: data.deliveryEta || data.delivery_eta_label || null,
+    health_guarantee_label: data.healthGuarantee || data.health_guarantee_label || null,
+    packaging_label: data.packagingLabel || data.packaging_label || null,
+    free_delivery_eligible: data.freeDelivery ?? data.free_delivery_eligible ?? true,
+    weight_grams: data.weight ? Number(data.weight) : null,
+    length_cm: data.dimLength ? Number(data.dimLength) : null,
+    width_cm: data.dimWidth ? Number(data.dimWidth) : null,
+    height_cm: data.dimHeight ? Number(data.dimHeight) : null,
+    seo_title: data.seoTitle || data.seo_title || null,
+    seo_description: data.seoDescription || data.seo_description || null,
     status: data.status ?? "draft",
     variants: data.variants ? data.variants.map((v: any) => ({
       variant_type: String(data.variantType || "size").toLowerCase(),
@@ -129,23 +145,74 @@ export const updateProductApi = async (
     payload.short_description = data.shortDescription ?? data.short_description;
   }
   if (data.description !== undefined) payload.description = data.description;
+  if (data.botanicalName !== undefined || data.botanical_name !== undefined) {
+    payload.botanical_name = data.botanicalName ?? data.botanical_name;
+  }
+  if (data.commonName !== undefined || data.common_name !== undefined) {
+    payload.common_name = data.commonName ?? data.common_name;
+  }
   if (data.currentPrice !== undefined || data.basePrice !== undefined || data.base_price !== undefined) {
     payload.base_price = Number(data.currentPrice ?? data.basePrice ?? data.base_price);
   }
   if (data.compareAtPrice !== undefined || data.compare_at_price !== undefined) {
-    payload.compare_at_price = (data.compareAtPrice ?? data.compare_at_price) !== null 
-      ? Number(data.compareAtPrice ?? data.compare_at_price) 
+    payload.compare_at_price = (data.compareAtPrice ?? data.compare_at_price) !== null
+      ? Number(data.compareAtPrice ?? data.compare_at_price)
       : null;
   }
+  if (data.costPrice !== undefined || data.costPerUnit !== undefined || data.cost_price !== undefined) {
+    const val = data.costPrice ?? data.costPerUnit ?? data.cost_price;
+    payload.cost_price = val ? Number(val) : null;
+  }
+  if (data.priceNote !== undefined || data.price_note !== undefined) {
+    payload.price_note = data.priceNote ?? data.price_note ?? null;
+  }
+  if (data.isTaxable !== undefined || data.is_taxable !== undefined) {
+    payload.is_taxable = data.isTaxable ?? data.is_taxable;
+  }
+  if (data.taxRate !== undefined || data.tax_rate !== undefined) {
+    const raw = data.taxRate ?? data.tax_rate;
+    payload.tax_rate = raw ? parseFloat(String(raw).replace(/[^0-9.]/g, '')) : null;
+  }
+  if (data.careLight !== undefined || data.lightRequirement !== undefined || data.care_light !== undefined) {
+    payload.care_light = data.careLight ?? data.lightRequirement ?? data.care_light ?? null;
+  }
+  if (data.careWater !== undefined || data.waterFrequency !== undefined || data.care_water !== undefined) {
+    payload.care_water = data.careWater ?? data.waterFrequency ?? data.care_water ?? null;
+  }
+  if (data.careTemperature !== undefined || data.temperatureRange !== undefined || data.care_temperature !== undefined) {
+    payload.care_temperature = data.careTemperature ?? data.temperatureRange ?? data.care_temperature ?? null;
+  }
   if (data.status !== undefined) payload.status = data.status;
-  if (data.careSkill !== undefined || data.care_skill !== undefined) {
-    payload.care_skill = normalizeCareSkill(data.careSkill ?? data.care_skill);
+  if (data.careSkill !== undefined || data.skillLevel !== undefined || data.care_skill !== undefined) {
+    payload.care_skill = normalizeCareSkill(data.careSkill ?? data.skillLevel ?? data.care_skill);
   }
-  if (data.isPetFriendly !== undefined || data.is_pet_friendly !== undefined) {
-    payload.is_pet_friendly = data.isPetFriendly ?? data.is_pet_friendly;
+  if (data.isPetFriendly !== undefined || data.petFriendly !== undefined || data.is_pet_friendly !== undefined) {
+    payload.is_pet_friendly = data.isPetFriendly ?? data.petFriendly ?? data.is_pet_friendly;
   }
-  if (data.isAirPurifying !== undefined || data.is_air_purifying !== undefined) {
-    payload.is_air_purifying = data.isAirPurifying ?? data.is_air_purifying;
+  if (data.isAirPurifying !== undefined || data.airPurifying !== undefined || data.is_air_purifying !== undefined) {
+    payload.is_air_purifying = data.isAirPurifying ?? data.airPurifying ?? data.is_air_purifying;
+  }
+  if (data.deliveryEta !== undefined || data.delivery_eta_label !== undefined) {
+    payload.delivery_eta_label = data.deliveryEta ?? data.delivery_eta_label ?? null;
+  }
+  if (data.healthGuarantee !== undefined || data.health_guarantee_label !== undefined) {
+    payload.health_guarantee_label = data.healthGuarantee ?? data.health_guarantee_label ?? null;
+  }
+  if (data.packagingLabel !== undefined || data.packaging_label !== undefined) {
+    payload.packaging_label = data.packagingLabel ?? data.packaging_label ?? null;
+  }
+  if (data.freeDelivery !== undefined || data.free_delivery_eligible !== undefined) {
+    payload.free_delivery_eligible = data.freeDelivery ?? data.free_delivery_eligible;
+  }
+  if (data.weight !== undefined) payload.weight_grams = data.weight ? Number(data.weight) : null;
+  if (data.dimLength !== undefined) payload.length_cm = data.dimLength ? Number(data.dimLength) : null;
+  if (data.dimWidth !== undefined) payload.width_cm = data.dimWidth ? Number(data.dimWidth) : null;
+  if (data.dimHeight !== undefined) payload.height_cm = data.dimHeight ? Number(data.dimHeight) : null;
+  if (data.seoTitle !== undefined || data.seo_title !== undefined) {
+    payload.seo_title = data.seoTitle ?? data.seo_title ?? null;
+  }
+  if (data.seoDescription !== undefined || data.seo_description !== undefined) {
+    payload.seo_description = data.seoDescription ?? data.seo_description ?? null;
   }
   if (data.variants !== undefined) {
     payload.variants = data.variants.map((v: any) => ({

@@ -67,7 +67,7 @@ class Settings(BaseSettings):
     ALLOWED_ORIGINS: Union[List[str], str] = ["http://localhost:3000", "http://localhost:3001", "https://plaintwebsite.vercel.app"]
 
     class Config:
-        env_file = ".env"
+        env_file = str(Path(__file__).resolve().parents[1] / ".env")
         extra = "ignore"
 
 

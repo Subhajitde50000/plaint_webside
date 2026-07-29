@@ -46,3 +46,20 @@ export async function adjustPointsApi(uuid: string, points: number, reason: stri
 export async function changeTierApi(uuid: string, tier: CustomerTier, reason?: string) { return (await adminApi.patch(`/admin/customers/${uuid}/tier`, { tier, reason })).data; }
 export async function addCustomerNoteApi(uuid: string, note: string) { return (await adminApi.post(`/admin/customers/${uuid}/notes`, { note })).data; }
 export async function getCustomerOrdersApi(uuid: string, page = 1) { return (await adminApi.get(`/admin/customers/${uuid}/orders`, { params: { page } })).data as { items: CustomerOrder[]; total: number }; }
+
+export interface CustomerReview { id: string; product: string; rating: number; text: string; date: string; status: string; }
+export interface CustomerActivityEntry { id: string; datetime: string; actor: string; action: string; type: "order" | "account" | "admin" | "system" | "loyalty"; }
+export async function getCustomerReviewsApi(uuid: string): Promise<CustomerReview[]> { return (await adminApi.get(`/admin/customers/${uuid}/reviews`)).data; }
+export async function getCustomerActivityApi(uuid: string): Promise<CustomerActivityEntry[]> { return (await adminApi.get(`/admin/customers/${uuid}/activity`)).data; }
+
+export interface CustomerCartItem { id: string; name: string; price: string; quantity: number; }
+export interface CustomerWishlistItem { id: string; name: string; price: string; }
+export async function getCustomerCartApi(uuid: string): Promise<CustomerCartItem[]> { return (await adminApi.get(`/admin/customers/${uuid}/cart`)).data; }
+export async function getCustomerWishlistApi(uuid: string): Promise<CustomerWishlistItem[]> { return (await adminApi.get(`/admin/customers/${uuid}/wishlist`)).data; }
+
+export interface ActivityLogCustomer { uuid: string; first_name: string; last_name: string; email: string; }
+export interface ActivityLogEntry { id: string; datetime: string; actor: string; action: string; type: "order" | "account" | "admin" | "system" | "loyalty"; customer?: ActivityLogCustomer; }
+export interface ActivityLogResponse { items: ActivityLogEntry[]; total: number; page: number; page_size: number; }
+export async function getAllActivityLogsApi(filters: { customer_uuid?: string; q?: string; type?: string; start_date?: string; end_date?: string; page?: number; page_size?: number } = {}): Promise<ActivityLogResponse> {
+  return (await adminApi.get("/admin/customers/activity/log", { params: filters })).data;
+}

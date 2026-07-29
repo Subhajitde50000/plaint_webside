@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useCallback, use, useMemo } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import SharedNavbar from "@/components/Navbar";
+import PdpSkeleton, { ReviewSkeleton } from "@/components/pdp/PdpSkeleton";
 import { useProduct } from "@/features/products/hooks/useProduct";
 import { useProducts } from "@/features/products/hooks/useProducts";
 import { useCart } from "@/features/cart/hooks/useCart";
@@ -617,7 +618,11 @@ export default function ProductDetailPage({ params }: PageProps) {
       images,
       pots,
       careGuide,
-      relatedProducts: related.length > 0 ? related : MOCK_RELATED_PRODUCTS
+      relatedProducts: related.length > 0 ? related : MOCK_RELATED_PRODUCTS,
+      deliveryEta: product.delivery_eta_label || '3–5 business days',
+      healthGuarantee: product.health_guarantee_label || '7-day health guarantee',
+      packagingLabel: product.packaging_label || 'Eco-friendly packaging',
+      freeDelivery: product.free_delivery_eligible !== false,
     };
   }, [product, relatedData]);
 
@@ -690,14 +695,7 @@ export default function ProductDetailPage({ params }: PageProps) {
   }, [selectedSize, size, qty]);
 
   if (isLoading) {
-    return (
-      <>
-        <SharedNavbar />
-        <div style={{ display: "flex", justifyContent: "center", alignItems: "center", minHeight: "100vh", fontFamily: "Poppins, sans-serif", fontSize: 16 }}>
-          Loading product details...
-        </div>
-      </>
-    );
+    return <PdpSkeleton />;
   }
 
   if (isError || !p) {
@@ -1358,9 +1356,9 @@ export default function ProductDetailPage({ params }: PageProps) {
               display: "flex", flexDirection: "column", gap: "10px",
             }}>
               {[
-                { icon: <TruckIcon />, label: "Free Delivery", desc: "Estimated in 3–5 business days" },
-                { icon: <RefreshIcon />, label: "7-Day Health Guarantee", desc: "Unhappy? Return within 7 days, no questions" },
-                { icon: <PackageIcon />, label: "Eco Packaging", desc: "100% sustainable, plant-safe materials" },
+                { icon: <TruckIcon />, label: p.freeDelivery ? "Free Delivery" : "Delivery", desc: p.deliveryEta },
+                { icon: <RefreshIcon />, label: "Health Guarantee", desc: p.healthGuarantee },
+                { icon: <PackageIcon />, label: "Packaging", desc: p.packagingLabel },
               ].map((row) => (
                 <div key={row.label} style={{ display: "flex", alignItems: "flex-start", gap: "12px" }}>
                   <span style={{ color: "var(--color-green-mid)", flexShrink: 0, marginTop: "1px" }}>{row.icon}</span>
@@ -1600,7 +1598,11 @@ export default function ProductDetailPage({ params }: PageProps) {
               {/* Review Cards */}
               <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
                 {isReviewsLoading ? (
-                  <p style={{ textAlign: "center", padding: "32px", color: "var(--color-text-secondary)", fontFamily: "DM Sans" }}>Loading reviews...</p>
+                  <>
+                    <ReviewSkeleton />
+                    <ReviewSkeleton />
+                    <ReviewSkeleton />
+                  </>
                 ) : !reviewsData?.items || reviewsData.items.length === 0 ? (
                   <div style={{ background: "white", padding: "40px", borderRadius: "var(--radius-lg)", textAlign: "center" }}>
                     <p style={{ fontFamily: "Poppins", fontWeight: 600, fontSize: "16px", color: "var(--color-text-primary)", marginBottom: "4px" }}>No reviews match your filters yet</p>

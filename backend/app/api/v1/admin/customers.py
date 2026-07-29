@@ -9,10 +9,14 @@ from app.database import get_db
 from app.dependencies import require_customer_list, require_ops_or_above, require_support_or_above, require_super_admin
 from app.models.address import Address
 from app.models.admin import AdminUser
+from app.models.cart import Cart, CartItem
 from app.models.customer_note import CustomerNote
 from app.models.loyalty import LoyaltyAccount, LoyaltyTransaction
 from app.models.order import Order
+from app.models.product import Product, ProductVariant
+from app.models.review import Review
 from app.models.user import User
+from app.models.loyalty import Wishlist, WishlistItem
 from app.schemas.customer import CustomerBlockRequest, CustomerNoteRequest, UpdateProfileRequest
 from app.schemas.loyalty import AdjustPointsRequest, AdminSetTierRequest
 from app.services.loyalty_service import LoyaltyService
@@ -123,6 +127,118 @@ def list_customers(
     return result
 
 
+@router.get("/activity/log")
+def get_all_activity_logs(
+    db: Session = Depends(get_db),
+    admin: AdminUser = Depends(require_support_or_above),
+    customer_uuid: Optional[str] = Query(None),
+    q: Optional[str] = Query(None),
+    type_filter: Optional[str] = Query(None, alias="type"),
+    start_date: Optional[str] = Query(None),
+    end_date: Optional[str] = Query(None),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1, le=100)
+):
+    # Query loyalty transactions
+    loyalty_query = db.query(LoyaltyTransaction, User).join(User, User.id == LoyaltyTransaction.user_id)
+    if customer_uuid:
+        loyalty_query = loyalty_query.filter(User.uuid == customer_uuid)
+    if start_date:
+        try:
+            sd = datetime.fromisoformat(start_date)
+            loyalty_query = loyalty_query.filter(LoyaltyTransaction.created_at >= sd)
+        except ValueError: pass
+    if end_date:
+        try:
+            ed = datetime.fromisoformat(end_date).replace(hour=23, minute=59, second=59)
+            loyalty_query = loyalty_query.filter(LoyaltyTransaction.created_at <= ed)
+        except ValueError: pass
+    if q:
+        pattern = f"%{q.strip()}%"
+        loyalty_query = loyalty_query.filter(or_(
+            User.first_name.ilike(pattern),
+            User.last_name.ilike(pattern),
+            User.email.ilike(pattern),
+            LoyaltyTransaction.description.ilike(pattern)
+        ))
+    
+    # Query orders
+    order_query = db.query(Order, User).join(User, User.id == Order.user_id)
+    if customer_uuid:
+        order_query = order_query.filter(User.uuid == customer_uuid)
+    if start_date:
+        try:
+            sd = datetime.fromisoformat(start_date)
+            order_query = order_query.filter(Order.created_at >= sd)
+        except ValueError: pass
+    if end_date:
+        try:
+            ed = datetime.fromisoformat(end_date).replace(hour=23, minute=59, second=59)
+            order_query = order_query.filter(Order.created_at <= ed)
+        except ValueError: pass
+    if q:
+        pattern = f"%{q.strip()}%"
+        order_query = order_query.filter(or_(
+            User.first_name.ilike(pattern),
+            User.last_name.ilike(pattern),
+            User.email.ilike(pattern),
+            Order.order_number.ilike(pattern)
+        ))
+
+    entries = []
+    
+    # Fetch based on type filter
+    if not type_filter or type_filter == "loyalty":
+        txns = loyalty_query.order_by(LoyaltyTransaction.created_at.desc()).limit(200).all()
+        for t, u in txns:
+            entries.append({
+                "id": f"loyalty-{t.id}",
+                "datetime": t.created_at.isoformat() if t.created_at else None,
+                "actor": "System",
+                "action": f"{t.description or t.type.capitalize()} ({'+' if t.points > 0 else ''}{t.points} pts)",
+                "type": "loyalty",
+                "customer": {
+                    "uuid": u.uuid,
+                    "first_name": u.first_name,
+                    "last_name": u.last_name,
+                    "email": u.email
+                }
+            })
+            
+    if not type_filter or type_filter == "order":
+        orders = order_query.order_by(Order.created_at.desc()).limit(200).all()
+        for o, u in orders:
+            entries.append({
+                "id": f"order-{o.id}",
+                "datetime": o.created_at.isoformat() if o.created_at else None,
+                "actor": "Customer",
+                "action": f"Placed order #{o.order_number} — {o.status.capitalize()}",
+                "type": "order",
+                "customer": {
+                    "uuid": u.uuid,
+                    "first_name": u.first_name,
+                    "last_name": u.last_name,
+                    "email": u.email
+                }
+            })
+            
+    # Sort entries by datetime desc
+    entries.sort(key=lambda x: x["datetime"] or "", reverse=True)
+    
+    # Paginate manually
+    total = len(entries)
+    start = (page - 1) * page_size
+    end = start + page_size
+    paginated_entries = entries[start:end]
+    
+    return {
+        "items": paginated_entries,
+        "total": total,
+        "page": page,
+        "page_size": page_size
+    }
+
+
 @router.get("/{customer_uuid}")
 def get_customer(customer_uuid: str, db: Session = Depends(get_db), admin: AdminUser = Depends(require_support_or_above)):
     user = db.query(User).options(joinedload(User.addresses), joinedload(User.loyalty_account)).filter(
@@ -225,3 +341,64 @@ def get_customer_orders(customer_uuid: str, db: Session = Depends(get_db), admin
                         "total": float(order.total), "status": order.status, "payment_status": order.payment_status,
                         "items": len(order.items)} for order in result["items"]]
     return result
+
+
+@router.get("/{customer_uuid}/reviews")
+def get_customer_reviews(customer_uuid: str, db: Session = Depends(get_db), admin: AdminUser = Depends(require_support_or_above)):
+    user = db.query(User).filter(User.uuid == customer_uuid, User.deleted_at.is_(None)).first()
+    if not user: raise HTTPException(status_code=404, detail="Customer not found.")
+    rows = (db.query(Review, Product.title)
+              .join(Product, Product.id == Review.product_id)
+              .filter(Review.user_id == user.id, Review.deleted_at.is_(None))
+              .order_by(Review.created_at.desc()).all())
+    return [{"id": str(r.uuid), "product": title or "Unknown Product", "rating": r.rating,
+             "text": r.body or r.title or "", "date": r.created_at, "status": r.status} for r, title in rows]
+
+
+@router.get("/{customer_uuid}/activity")
+def get_customer_activity(customer_uuid: str, db: Session = Depends(get_db), admin: AdminUser = Depends(require_support_or_above)):
+    user = db.query(User).filter(User.uuid == customer_uuid, User.deleted_at.is_(None)).first()
+    if not user: raise HTTPException(status_code=404, detail="Customer not found.")
+    # Loyalty transactions
+    txns = db.query(LoyaltyTransaction).filter(LoyaltyTransaction.user_id == user.id).order_by(LoyaltyTransaction.created_at.desc()).limit(50).all()
+    loyalty_entries = [{"id": str(t.id), "datetime": t.created_at, "actor": "System",
+                        "action": f"{t.description or t.type.capitalize()} ({'+' if t.points > 0 else ''}{t.points} pts)",
+                        "type": "loyalty"} for t in txns]
+    # Orders
+    orders = db.query(Order).filter(Order.user_id == user.id).order_by(Order.created_at.desc()).limit(50).all()
+    order_entries = [{"id": f"order-{o.id}", "datetime": o.created_at, "actor": "Customer",
+                      "action": f"Placed order #{o.order_number} — {o.status.capitalize()}",
+                      "type": "order"} for o in orders]
+    # Merge and sort
+    all_entries = sorted(loyalty_entries + order_entries, key=lambda x: x["datetime"] or datetime.min, reverse=True)[:100]
+    return all_entries
+
+
+@router.get("/{customer_uuid}/cart")
+def get_customer_cart(customer_uuid: str, db: Session = Depends(get_db), admin: AdminUser = Depends(require_support_or_above)):
+    user = db.query(User).filter(User.uuid == customer_uuid, User.deleted_at.is_(None)).first()
+    if not user: raise HTTPException(status_code=404, detail="Customer not found.")
+    cart = db.query(Cart).filter(Cart.user_id == user.id).order_by(Cart.updated_at.desc()).first()
+    if not cart: return []
+    rows = (db.query(CartItem, ProductVariant, Product.title)
+              .join(ProductVariant, ProductVariant.id == CartItem.variant_id)
+              .join(Product, Product.id == ProductVariant.product_id)
+              .filter(CartItem.cart_id == cart.id).all())
+    return [{"id": str(item.id), "name": f"{title} — {variant.option_name}",
+             "price": f"₹{float(item.price_at_add):,.0f}", "quantity": item.quantity}
+            for item, variant, title in rows]
+
+
+@router.get("/{customer_uuid}/wishlist")
+def get_customer_wishlist(customer_uuid: str, db: Session = Depends(get_db), admin: AdminUser = Depends(require_support_or_above)):
+    user = db.query(User).filter(User.uuid == customer_uuid, User.deleted_at.is_(None)).first()
+    if not user: raise HTTPException(status_code=404, detail="Customer not found.")
+    wishlist = db.query(Wishlist).filter(Wishlist.user_id == user.id).first()
+    if not wishlist: return []
+    rows = (db.query(WishlistItem, ProductVariant, Product.title, Product.base_price)
+              .join(ProductVariant, ProductVariant.id == WishlistItem.variant_id, isouter=True)
+              .join(Product, Product.id == WishlistItem.product_id)
+              .filter(WishlistItem.wishlist_id == wishlist.id).all())
+    return [{"id": str(wi.id), "name": f"{title}" + (f" — {variant.option_name}" if variant else ""),
+             "price": f"₹{float(variant.price if variant else base_price):,.0f}"}
+            for wi, variant, title, base_price in rows]
