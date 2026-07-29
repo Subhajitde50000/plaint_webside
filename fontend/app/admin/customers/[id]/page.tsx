@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { customerFromApi, Customer, CustomerTier, CustomerStatus, Order, Review, AICareQuery, GardenBooking, ActivityEntry, AdminNote, RecentlyViewedItem, SearchEntry, CartItem } from "../data";
-import { useAddCustomerNote, useAdjustPoints, useAdminCustomer, useBlockCustomer, useCustomerOrders } from "@/features/admin-customers";
+import { useAddCustomerNote, useAdjustPoints, useAdminCustomer, useBlockCustomer, useCustomerOrders, useCustomerReviews, useCustomerActivity, useCustomerCart, useCustomerWishlist } from "@/features/admin-customers";
 
 /* ─── tokens ─────────────────────────────────────────────────────────────── */
 const T = {
@@ -740,12 +740,12 @@ function TabActivity({ c }: { c: Customer }) {
       {/* ─── Activity Log ─── */}
       <Card>
         <CardHeader title="Activity Log" action={
-          <a href={`/admin/activity-log?customer=${c.id}`} style={{ fontSize: 12, color: T.accent, textDecoration: "none" }}>View Full Log ↗</a>
+          <Link href={`/admin/activity-log?customer=${c.id}`} style={{ fontSize: 12, color: T.accent, textDecoration: "none" }}>View Full Log ↗</Link>
         } />
         {c.activityLog.length === 0
           ? <div style={{ padding: "40px", textAlign: "center", color: T.muted, fontSize: 13 }}>No activity recorded yet.</div>
           : <div role="log" aria-label="Customer activity log">
-              {c.activityLog.map((e, i) => (
+              {c.activityLog.slice(0, 15).map((e, i) => (
                 <div key={e.id} style={{
                   display: "flex", gap: 12, padding: "12px 18px",
                   borderTop: i > 0 ? `1px solid ${T.borderMuted}` : undefined,
@@ -1084,8 +1084,36 @@ export default function CustomerDetailPage() {
   const id = params?.id as string;
   const { data: customerData, isLoading, isError } = useAdminCustomer(id);
   const { data: ordersData } = useCustomerOrders(id);
+  const { data: reviewsData } = useCustomerReviews(id);
+  const { data: activityData } = useCustomerActivity(id);
+  const { data: cartData } = useCustomerCart(id);
+  const { data: wishlistData } = useCustomerWishlist(id);
   const blockCustomer = useBlockCustomer(id);
-  const customer = customerData ? customerFromApi(customerData, ordersData?.items ?? []) : undefined;
+
+  const date = (v: string) => v ? new Intl.DateTimeFormat("en-IN", { day: "2-digit", month: "short", year: "numeric" }).format(new Date(v)) : "—";
+
+  const customer = customerData ? (() => {
+    const base = customerFromApi(customerData, ordersData?.items ?? []);
+    if (reviewsData) {
+      base.reviews = reviewsData.map(r => ({
+        id: r.id, product: r.product, productImg: "", rating: r.rating,
+        text: r.text, date: date(r.date), status: r.status as "published" | "pending" | "rejected",
+      }));
+      base.reviewCount = reviewsData.length;
+    }
+    if (activityData) {
+      base.activityLog = activityData.map(a => ({
+        id: a.id, datetime: date(a.datetime), actor: a.actor, action: a.action, type: a.type,
+      }));
+    }
+    if (cartData) {
+      base.cart = cartData.map(i => ({ id: i.id, name: i.name, price: i.price, quantity: i.quantity, img: "" }));
+    }
+    if (wishlistData) {
+      base.wishlist = wishlistData.map(i => ({ id: i.id, name: i.name, price: i.price, img: "" }));
+    }
+    return base;
+  })() : undefined;
 
   const [tab, setTab]           = useState<Tab>("overview");
   const [emailOpen, setEmailOpen] = useState(false);
