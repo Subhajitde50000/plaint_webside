@@ -91,6 +91,7 @@ export interface UserPlant {
   id: number;
   user_id: number;
   product_id?: number | null;
+  plant_name?: string | null;
   nickname: string;
   species?: string | null;
   acquired_at?: string | null;
