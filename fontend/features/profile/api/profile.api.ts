@@ -100,16 +100,22 @@ export interface UserPlant {
   next_water_due?: string | null;
   notes?: string | null;
   image_url?: string | null;
+  care_logs?: PlantCareLog[];
 }
 
 export interface CreatePlantPayload {
+  plant_name?: string;
+  name?: string;
   nickname: string;
   product_id?: number;
   species?: string;
+  added_at?: string;
   acquired_at?: string;
+  added?: string;
   location?: string;
   watering_interval_days?: number;
   notes?: string;
+  photo_url?: string;
   image_url?: string;
 }
 

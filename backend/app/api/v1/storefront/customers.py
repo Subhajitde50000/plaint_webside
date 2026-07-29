@@ -201,7 +201,34 @@ async def remove_from_wishlist(
 @router.get("/me/plants")
 async def get_my_plants(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     plants = db.query(UserPlant).filter(UserPlant.user_id == user.id).all()
-    return plants
+    res = []
+    for plant in plants:
+        p_dict = {
+            "id": plant.id,
+            "user_id": plant.user_id,
+            "product_id": plant.product_id,
+            "plant_name": plant.plant_name,
+            "nickname": plant.nickname,
+            "location": plant.location,
+            "photo_url": plant.photo_url,
+            "image_url": plant.photo_url,
+            "added_at": plant.added_at,
+            "last_watered_at": plant.last_watered_at,
+            "next_water_due": plant.next_water_due,
+            "watering_interval_days": plant.watering_interval_days,
+            "created_at": plant.created_at,
+            "care_logs": [
+                {
+                    "id": log.id,
+                    "type": log.type,
+                    "note": log.note,
+                    "logged_at": log.logged_at.isoformat() if log.logged_at else None,
+                }
+                for log in (plant.care_logs or [])
+            ]
+        }
+        res.append(p_dict)
+    return res
 
 
 @router.post("/me/plants", status_code=status.HTTP_201_CREATED)
@@ -210,8 +237,17 @@ async def add_plant(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    pprint.pprint(f'\n\nAdding plant for user {user.id} with payload: {payload}\n\n')
-    plant = UserPlant(user_id=user.id, **payload.model_dump())
+    pprint(f'\n\nAdding plant for user {user.id} with payload: {payload}\n\n')
+    plant_data = {
+        "plant_name": payload.plant_name,
+        "nickname": payload.nickname or payload.plant_name,
+        "product_id": payload.product_id,
+        "location": payload.location or "Indoor",
+        "photo_url": payload.photo_url,
+        "added_at": payload.added_at or date.today(),
+        "watering_interval_days": payload.watering_interval_days or 7,
+    }
+    plant = UserPlant(user_id=user.id, **plant_data)
     db.add(plant)
     db.commit()
     db.refresh(plant)
