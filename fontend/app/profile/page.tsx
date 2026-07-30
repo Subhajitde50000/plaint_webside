@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import {
   useMe, useUpdateProfile,
   useAddresses, useAddAddress, useUpdateAddress, useDeleteAddress,
@@ -1271,10 +1271,6 @@ function WishlistSection({
             return (
               <div key={item.product_id} style={{ position: "relative", background: "var(--profile-card-bg)", border: `1px solid ${selected.includes(item.product_id) ? "var(--color-surface-raised)" : "var(--profile-card-border)"}`, borderRadius: "var(--radius-md)", overflow: "hidden", boxShadow: "var(--shadow-card)", transition: "all var(--motion-fast) ease" }}>
                 {/* Checkbox overlay */}
-                <div style={{ position: "absolute", top: 10, left: 10, zIndex: 2 }}>
-                  <input type="checkbox" checked={selected.includes(item.product_id)} onChange={() => toggleSelect(item.product_id)}
-                    style={{ width: 18, height: 18, accentColor: "var(--color-surface-raised)", cursor: "pointer" }} aria-label={`Select ${item.product_title}`} />
-                </div>
                 {/* Remove btn */}
                 <button onClick={() => handleRemove(item.product_id)} aria-label={`Remove ${item.product_title} from wishlist`}
                   style={{ position: "absolute", top: 8, right: 8, zIndex: 2, width: 28, height: 28, borderRadius: "50%", background: "rgba(255,255,255,0.9)", border: "1px solid var(--profile-divider)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, color: "var(--profile-meta)" }}>
@@ -1324,17 +1320,378 @@ function WishlistSection({
   );
 }
 /* ─────────────────────────────────────────────
+   PLANT CARE GUIDES & WATERING HELPERS
+───────────────────────────────────────────── */
+const CARE_GUIDES: Record<string, any> = {
+  monstera: {
+    scientificName: "Monstera deliciosa",
+    category: "Tropical Foliage",
+    difficulty: "Easy",
+    light: {
+      type: "Bright Indirect Light",
+      description: "Thrives in bright, filtered light. Direct sun may burn split leaves, while low light slows growth.",
+    },
+    water: {
+      frequency: "Every 7-10 days",
+      instructions: "Water thoroughly when the top 2-3 inches of soil feel dry to touch. Allow excess water to drain completely.",
+    },
+    temperature: {
+      range: "18°C - 27°C (65°F - 80°F)",
+      notes: "Keep away from cold drafts and AC vents.",
+    },
+    humidity: {
+      level: "Medium to High (60%+)",
+      tips: "Mist leaves regularly or use a pebble tray to encourage aerial roots and leaf cutouts.",
+    },
+    soil: {
+      type: "Peat-based potting mix with perlite & orchid bark",
+      repotting: "Repot every 1-2 years in spring into a container 2 inches larger with a moss pole.",
+    },
+    fertilizer: {
+      schedule: "Bi-weekly in Spring & Summer",
+      recommendation: "Use balanced liquid houseplant fertilizer diluted to half strength.",
+    },
+    petSafety: {
+      safe: false,
+      details: "Contains insoluble calcium oxalates. Keep out of reach of cats and dogs.",
+    },
+    commonIssues: [
+      { symptom: "Yellowing leaves", cause: "Overwatering or soggy soil", solution: "Let soil dry out completely and ensure proper drainage." },
+      { symptom: "Brown crisp edges", cause: "Low humidity or underwatering", solution: "Increase room humidity and maintain consistent watering." },
+      { symptom: "No leaf splits", cause: "Insufficient light", solution: "Move to a brighter spot near an east or west window." },
+    ],
+  },
+  snake: {
+    scientificName: "Dracaena trifasciata",
+    category: "Succulent & Air Purifier",
+    difficulty: "Easy",
+    light: {
+      type: "Adaptable (Low to Bright)",
+      description: "Extremely resilient. Performs best in bright indirect light but tolerates low light environments.",
+    },
+    water: {
+      frequency: "Every 2-3 weeks",
+      instructions: "Allow soil to dry out completely between waterings. Reduce watering to monthly in winter.",
+    },
+    temperature: {
+      range: "15°C - 29°C (60°F - 85°F)",
+      notes: "Protect from freezing temperatures below 10°C.",
+    },
+    humidity: {
+      level: "Average Household (30% - 50%)",
+      tips: "Tolerates dry indoor air naturally. No misting required.",
+    },
+    soil: {
+      type: "Cactus or succulent potting mix",
+      repotting: "Repot every 2-3 years only when root-bound.",
+    },
+    fertilizer: {
+      schedule: "Monthly in Spring & Summer",
+      recommendation: "Feed with mild succulent fertilizer during active growth.",
+    },
+    petSafety: {
+      safe: false,
+      details: "Mildly toxic to pets if chewed.",
+    },
+    commonIssues: [
+      { symptom: "Squishy leaves", cause: "Overwatering", solution: "Stop watering immediately and check roots." },
+      { symptom: "Wrinkled foliage", cause: "Underwatering", solution: "Give a deep, thorough soak." },
+    ],
+  },
+  pothos: {
+    scientificName: "Epipremnum aureum",
+    category: "Trailing Vine",
+    difficulty: "Easy",
+    light: {
+      type: "Low to Bright Indirect",
+      description: "Thrives in almost any light. Higher light preserves leaf variegation.",
+    },
+    water: {
+      frequency: "Every 7-14 days",
+      instructions: "Water when the top 50% of soil feels dry. Leaves droop slightly when thirsty.",
+    },
+    temperature: {
+      range: "18°C - 28°C (65°F - 82°F)",
+      notes: "Avoid cold drafts below 15°C.",
+    },
+    humidity: {
+      level: "Average to High (40%+)",
+      tips: "Adaptable to standard indoor humidity.",
+    },
+    soil: {
+      type: "Standard well-draining potting mix",
+      repotting: "Repot every 1-2 years into a slightly larger pot.",
+    },
+    fertilizer: {
+      schedule: "Monthly in Spring/Summer",
+      recommendation: "Standard balanced liquid plant food.",
+    },
+    petSafety: {
+      safe: false,
+      details: "Contains calcium oxalates. Place on high shelves or in hanging planters.",
+    },
+    commonIssues: [
+      { symptom: "Yellow leaves", cause: "Overwatering", solution: "Allow soil to dry more between waterings." },
+      { symptom: "Loss of variegation", cause: "Too low light", solution: "Move closer to natural light." },
+    ],
+  },
+  peace: {
+    scientificName: "Spathiphyllum wallisii",
+    category: "Flowering Houseplant",
+    difficulty: "Easy",
+    light: {
+      type: "Medium to Low Indirect",
+      description: "Prefers medium or shaded light. Direct sun scorches leaves and white blooms.",
+    },
+    water: {
+      frequency: "Every 5-7 days",
+      instructions: "Keep soil consistently moist but not soggy. Leaves droop visibly when thirsty.",
+    },
+    temperature: {
+      range: "18°C - 26°C (65°F - 78°F)",
+      notes: "Keep away from sudden cold drafts.",
+    },
+    humidity: {
+      level: "High (50%+)",
+      tips: "Loves warm, humid rooms like bathrooms or near humidifiers.",
+    },
+    soil: {
+      type: "Rich organic potting mix with peat moss",
+      repotting: "Repot annually or when roots fill container.",
+    },
+    fertilizer: {
+      schedule: "Every 6 weeks in Spring/Summer",
+      recommendation: "High-phosphorus fertilizer to encourage blooming.",
+    },
+    petSafety: {
+      safe: false,
+      details: "Mildly toxic to pets. May cause oral irritation if ingested.",
+    },
+    commonIssues: [
+      { symptom: "Black leaf tips", cause: "Tap water chemicals or fluoride", solution: "Use filtered or rainwater." },
+      { symptom: "No flowers", cause: "Light level too low", solution: "Provide slightly brighter indirect light." },
+    ],
+  },
+};
+
+function getCareGuideForPlant(plantName: string): any {
+  const nameLower = (plantName || "").toLowerCase();
+  const matchedKey = Object.keys(CARE_GUIDES).find((key) => nameLower.includes(key));
+  const baseData = matchedKey ? CARE_GUIDES[matchedKey] : {};
+
+  return {
+    plantName: plantName || "Indoor Plant",
+    scientificName: baseData.scientificName || `${plantName} sp.`,
+    category: baseData.category || "Indoor Foliage",
+    difficulty: baseData.difficulty || "Easy",
+    light: baseData.light || {
+      type: "Bright Indirect Light",
+      description: "Place near a bright window filtered by sheer curtains for optimal growth.",
+    },
+    water: baseData.water || {
+      frequency: "Every 7-10 days",
+      instructions: "Check soil moisture before watering. Water deeply when top 1-2 inches feel dry.",
+    },
+    temperature: baseData.temperature || {
+      range: "18°C - 26°C (65°F - 78°F)",
+      notes: "Maintain a comfortable indoor temperature away from harsh drafts.",
+    },
+    humidity: baseData.humidity || {
+      level: "Moderate (40% - 60%)",
+      tips: "Occasional leaf misting or group with other plants to maintain humidity.",
+    },
+    soil: baseData.soil || {
+      type: "Well-draining peat and perlite potting mix",
+      repotting: "Repot every 12-18 months into a pot 1-2 inches wider with drainage.",
+    },
+    fertilizer: baseData.fertilizer || {
+      schedule: "Every 4 weeks in Spring & Summer",
+      recommendation: "Feed with balanced water-soluble houseplant fertilizer.",
+    },
+    petSafety: baseData.petSafety || {
+      safe: false,
+      details: "Keep out of reach of curious pets as a general precaution.",
+    },
+    commonIssues: baseData.commonIssues || [
+      { symptom: "Yellowing leaves", cause: "Overwatering", solution: "Allow soil to dry further before watering again." },
+      { symptom: "Brown leaf tips", cause: "Low humidity or tap water minerals", solution: "Increase room humidity and use filtered water." },
+    ],
+  };
+}
+
+function getWaterStatusInfo(plant: any) {
+  if (plant.waterStatus === "overdue") return { color: "#dc2626", label: "Water Overdue!" };
+  if (plant.waterStatus === "today") return { color: "#d97706", label: "Water Due Today" };
+  
+  if (plant.last_watered_at) {
+    const todayStr = new Date().toISOString().split("T")[0];
+    if (plant.last_watered_at === todayStr) {
+      return { color: "#00b566", label: "Watered Today" };
+    }
+  }
+
+  if (plant.next_water_due) {
+    const dueDate = new Date(plant.next_water_due);
+    const today = new Date();
+    const diffTime = dueDate.getTime() - today.getTime();
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    
+    if (diffDays < 0) return { color: "#dc2626", label: "Water Overdue!" };
+    if (diffDays === 0) return { color: "#d97706", label: "Water Due Today" };
+    return { color: "#00b566", label: `Water in ${diffDays} day${diffDays > 1 ? "s" : ""}` };
+  }
+
+  return { color: "#00b566", label: "Watered Regularly" };
+}
+
+/* ─────────────────────────────────────────────
    SECTION: MY PLANTS
 ───────────────────────────────────────────── */
-function PlantsSection({ onToast, plants, onAddPlant, onLogCare }: { onToast: (msg: string, t?: ToastType["type"]) => void; plants: any[]; onAddPlant: (p: any) => void; onLogCare: (id: number, p: any) => void }) {
+function PlantsSection({
+  onToast,
+  plants,
+  onAddPlant,
+  onLogCare,
+  orders = [],
+}: {
+  onToast: (msg: string, t?: ToastType["type"]) => void;
+  plants: any[];
+  onAddPlant: (p: any) => void;
+  onLogCare: (id: number, p: any) => void;
+  orders?: any[];
+}) {
+  const { orders: fetchedOrders } = useMyOrders(1);
+  const userOrders = orders && orders.length > 0 ? orders : fetchedOrders;
+
   const [showAddModal, setShowAddModal] = useState(false);
-  const [newPlant, setNewPlant] = useState({ name: "", nickname: "", location: "", date: "" });
+  const [selectedOrderPlantId, setSelectedOrderPlantId] = useState<string>("");
+  const [careGuidePlant, setCareGuidePlant] = useState<any | null>(null);
+  const [noteModalPlant, setNoteModalPlant] = useState<any | null>(null);
+  const [noteText, setNoteText] = useState("");
+  const [viewNotesPlant, setViewNotesPlant] = useState<any | null>(null);
+
+  const [newPlant, setNewPlant] = useState({
+    name: "",
+    nickname: "",
+    location: "",
+    date: "",
+    imageUrl: "",
+    productId: undefined as number | undefined,
+  });
+
+  const purchasedPlantOptions = useMemo(() => {
+    if (!userOrders || userOrders.length === 0) return [];
+
+    const sortedOrders = [...userOrders].sort((a, b) => {
+      const timeA = a.created_at ? new Date(a.created_at).getTime() : 0;
+      const timeB = b.created_at ? new Date(b.created_at).getTime() : 0;
+      return timeA - timeB;
+    });
+
+    const titleCounts: Record<string, number> = {};
+    sortedOrders.forEach((o) => {
+      (o.items || []).forEach((item: any) => {
+        const rawTitle = item.title || "Plant";
+        const qty = Math.max(1, item.quantity || 1);
+        titleCounts[rawTitle] = (titleCounts[rawTitle] || 0) + qty;
+      });
+    });
+
+    const options: Array<{
+      id: string;
+      displayName: string;
+      baseName: string;
+      nickname: string;
+      date: string;
+      formattedDate: string;
+      imageUrl?: string;
+      productId?: number;
+      orderNumber: string;
+    }> = [];
+
+    const titleTracker: Record<string, number> = {};
+
+    sortedOrders.forEach((order) => {
+      const orderDate = order.created_at ? new Date(order.created_at) : new Date();
+      const dateStr = orderDate.toISOString().split("T")[0];
+      const formattedDate = orderDate.toLocaleDateString("en-IN", {
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+      });
+
+      (order.items || []).forEach((item: any) => {
+        const rawTitle = item.title || "Plant";
+        const qty = Math.max(1, item.quantity || 1);
+
+        for (let q = 1; q <= qty; q++) {
+          titleTracker[rawTitle] = (titleTracker[rawTitle] || 0) + 1;
+          const count = titleTracker[rawTitle];
+          const totalCount = titleCounts[rawTitle] || 1;
+
+          const displayName = totalCount > 1 ? `${rawTitle} ${count}` : rawTitle;
+
+          options.push({
+            id: `${order.uuid || order.order_number || "ord"}-${item.id || item.product_id || "item"}-${count}`,
+            displayName,
+            baseName: rawTitle,
+            nickname: displayName,
+            date: dateStr,
+            formattedDate,
+            imageUrl: item.image_url,
+            productId: item.product_id,
+            orderNumber: order.order_number || "N/A",
+          });
+        }
+      });
+    });
+
+    return options;
+  }, [userOrders]);
+
   const handleAddPlant = (e: React.FormEvent) => {
     e.preventDefault();
-    onAddPlant({ name: newPlant.name, location: newPlant.location, added: newPlant.date });
+    const todayStr = new Date().toISOString().split("T")[0];
+    const plantDate = newPlant.date || todayStr;
+    const plantName = newPlant.name || newPlant.nickname || "My Plant";
+
+    onAddPlant({
+      plant_name: plantName,
+      name: plantName,
+      nickname: newPlant.nickname || plantName,
+      species: plantName,
+      location: newPlant.location || "Living Room",
+      added_at: plantDate,
+      acquired_at: plantDate,
+      added: plantDate,
+      photo_url: newPlant.imageUrl || undefined,
+      image_url: newPlant.imageUrl || undefined,
+      product_id: newPlant.productId,
+      watering_interval_days: 7,
+    });
     setShowAddModal(false);
-    setNewPlant({ name: "", nickname: "", location: "", date: "" });
+    setNewPlant({ name: "", nickname: "", location: "", date: "", imageUrl: "", productId: undefined });
+    setSelectedOrderPlantId("");
   };
+
+  const handleWaterPlant = (plant: any) => {
+    const plantId = Number(plant.id);
+    const plantName = plant.name || plant.nickname || plant.plant_name || "Plant";
+    onLogCare(plantId, { type: "watered", note: "Watered via quick action" });
+    onToast(`💧 Logged watering for ${plantName}!`, "success");
+  };
+
+  const handleSaveNote = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!noteModalPlant || !noteText.trim()) return;
+    const plantId = Number(noteModalPlant.id);
+    const plantName = noteModalPlant.name || noteModalPlant.nickname || noteModalPlant.plant_name || "Plant";
+    onLogCare(plantId, { type: "note", note: noteText.trim() });
+    onToast(`📝 Note saved for ${plantName}!`, "success");
+    setNoteModalPlant(null);
+    setNoteText("");
+  };
+
   return (
     <section aria-label="My Plants" style={{ animation: "slideUp var(--motion-normal) ease" }}>
       <div className="section-hdr">
@@ -1350,49 +1707,321 @@ function PlantsSection({ onToast, plants, onAddPlant, onLogCare }: { onToast: (m
         </div>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-          {plants.map(plant => {
-            const waterInfo = getWaterColor(plant.waterStatus);
+          {plants.map((plant: any) => {
+            const waterInfo = getWaterStatusInfo(plant);
             return (
               <div key={plant.id} className="profile-card">
                 <div style={{ display: "flex", gap: 16, alignItems: "flex-start" }}>
                   {/* Plant image */}
-                  <div style={{ width: 100, height: 100, borderRadius: "var(--radius-md)", background: "rgba(0,181,102,0.06)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 48, flexShrink: 0, border: "1px solid var(--profile-divider)" }}>{plant.img}</div>
+                  <div style={{ width: 100, height: 100, borderRadius: "var(--radius-md)", background: "rgba(0,181,102,0.06)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 48, flexShrink: 0, border: "1px solid var(--profile-divider)" }}>
+                    {plant.img || (plant.image_url || plant.photo_url ? <img src={plant.image_url || plant.photo_url} alt={plant.name || plant.plant_name} style={{ width: "100%", height: "100%", borderRadius: "var(--radius-md)", objectFit: "cover" }} /> : "🪴")}
+                  </div>
                   {/* Plant info */}
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
                       <div>
-                        <h3 style={{ fontSize: 16, fontWeight: 700, color: "var(--profile-heading)", marginBottom: 3 }}>{plant.name}</h3>
-                        <p style={{ fontSize: 9, color: "var(--profile-meta)" }}>Added: {plant.added}</p>
-                        <p style={{ fontSize: 12, color: "var(--profile-meta)", marginTop: 2 }}>📍 {plant.location}</p>
+                        <h3 style={{ fontSize: 16, fontWeight: 700, color: "var(--profile-heading)", marginBottom: 3 }}>{plant.name || plant.nickname || plant.plant_name}</h3>
+                        <p style={{ fontSize: 9, color: "var(--profile-meta)" }}>Added: {plant.added || plant.acquired_at || plant.added_at}</p>
+                        <p style={{ fontSize: 12, color: "var(--profile-meta)", marginTop: 2 }}>📍 {plant.location || "Indoor"}</p>
                       </div>
                       <button style={{ background: "none", border: "1px solid var(--profile-divider)", borderRadius: "var(--radius-sm)", width: 32, height: 32, cursor: "pointer", fontSize: 16, display: "flex", alignItems: "center", justifyContent: "center" }} aria-label="More options" aria-haspopup="menu">⋮</button>
                     </div>
                     {/* Care indicators */}
                     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "6px 16px", marginTop: 10 }}>
                       <p style={{ fontSize: 12, fontWeight: 600, color: waterInfo.color }}>💧 {waterInfo.label}</p>
-                      <p style={{ fontSize: 12, color: "var(--profile-meta)" }}>☀️ {plant.light}</p>
-                      <p style={{ fontSize: 12, color: "var(--profile-meta)" }}>🌡 {plant.temp}</p>
-                      <p style={{ fontSize: 12, color: "var(--profile-meta)" }}>🪴 Repot: {plant.repot}</p>
+                      <p style={{ fontSize: 12, color: "var(--profile-meta)" }}>☀️ {plant.light || "Bright Indirect"}</p>
+                      <p style={{ fontSize: 12, color: "var(--profile-meta)" }}>🌡 {plant.temp || "18-24°C"}</p>
+                      <p style={{ fontSize: 12, color: "var(--profile-meta)" }}>🪴 Repot: {plant.repot || "In 12 months"}</p>
                     </div>
+
+                    {/* Recent Care Notes / Activity section */}
+                    {((plant.care_logs && plant.care_logs.length > 0) || plant.notes) && (
+                      <div style={{ marginTop: 12, padding: "10px 12px", background: "rgba(0,181,102,0.04)", borderRadius: "var(--radius-sm)", border: "1px solid rgba(0,181,102,0.12)" }}>
+                        <p style={{ fontSize: 11, fontWeight: 700, color: "var(--profile-heading)", margin: "0 0 6px", textTransform: "uppercase", letterSpacing: 0.5 }}>
+                          📖 Care Log & Notes ({plant.care_logs?.length || (plant.notes ? 1 : 0)})
+                        </p>
+                        {plant.care_logs && plant.care_logs.length > 0 ? (
+                          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                            {plant.care_logs.slice(0, 3).map((log: any, idx: number) => (
+                              <div key={log.id || idx} style={{ fontSize: 12, color: "var(--profile-body)", display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+                                <span>
+                                  {log.type === "watered" ? "💧 Watered" : log.type === "fertilised" ? "🧪 Fertilised" : log.type === "repotted" ? "🪴 Repotted" : "📝 Note"}: {log.note || "Logged care"}
+                                </span>
+                                {log.logged_at && (
+                                  <span style={{ fontSize: 10, color: "var(--profile-meta)", flexShrink: 0, marginLeft: 8 }}>
+                                    {new Date(log.logged_at).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}
+                                  </span>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        ) : plant.notes ? (
+                          <p style={{ fontSize: 12, color: "var(--profile-body)", margin: 0 }}>📝 {plant.notes}</p>
+                        ) : null}
+                      </div>
+                    )}
                   </div>
                 </div>
                 {/* Card actions */}
                 <div style={{ borderTop: "1px solid var(--profile-divider)", marginTop: 14, paddingTop: 12, display: "flex", gap: 10, flexWrap: "wrap" }}>
-                  <button className="btn-profile-outline" style={{ height: 36, fontSize: 13 }} onClick={() => onLogCare(plant.id, { action: "water" })}>💧 Log Watering</button>
-                  <button className="btn-profile-outline" style={{ height: 36, fontSize: 13 }} onClick={() => onToast("Note added!", "success")}>📝 Add Note</button>
-                  <button style={{ background: "none", border: "none", color: "var(--color-surface-raised)", fontWeight: 600, fontSize: 13, cursor: "pointer", fontFamily: "Outfit", textDecoration: "underline" }}>View Care Guide</button>
+                  <button className="btn-profile-outline" style={{ height: 36, fontSize: 13 }} onClick={() => handleWaterPlant(plant)}>💧 Log Watering</button>
+                  <button className="btn-profile-outline" style={{ height: 36, fontSize: 13 }} onClick={() => { setNoteModalPlant(plant); setNoteText(""); }}>📝 Add Note</button>
+                  <button className="btn-profile-outline" style={{ height: 36, fontSize: 13 }} onClick={() => setViewNotesPlant(plant)}>📖 View Notes ({plant.care_logs?.length || 0})</button>
+                  <button style={{ background: "none", border: "none", color: "var(--color-surface-raised)", fontWeight: 600, fontSize: 13, cursor: "pointer", fontFamily: "Outfit", textDecoration: "underline" }} onClick={() => setCareGuidePlant(plant)}>View Care Guide</button>
                 </div>
               </div>
             );
           })}
         </div>
       )}
+
+      {/* Care Guide Modal */}
+      {careGuidePlant && (() => {
+        const plantName = careGuidePlant.name || careGuidePlant.nickname || careGuidePlant.plant_name || "Indoor Plant";
+        const guide = getCareGuideForPlant(plantName);
+        return (
+          <Modal
+            title={`🌿 Care Guide: ${guide.plantName}`}
+            onClose={() => setCareGuidePlant(null)}
+            maxWidth={680}
+            footer={
+              <>
+                <button
+                  type="button"
+                  className="btn-profile-outline"
+                  onClick={() => setCareGuidePlant(null)}
+                  style={{ flex: 1, justifyContent: "center" }}
+                >
+                  Close Guide
+                </button>
+                <button
+                  type="button"
+                  className="btn-profile-primary"
+                  onClick={() => {
+                    handleWaterPlant(careGuidePlant);
+                    setCareGuidePlant(null);
+                  }}
+                  style={{ flex: 1, justifyContent: "center" }}
+                >
+                  💧 Log Watering Now
+                </button>
+              </>
+            }
+          >
+            <div style={{ display: "flex", flexDirection: "column", gap: 20, maxHeight: "70vh", overflowY: "auto", paddingRight: 4 }}>
+              {/* Header summary */}
+              <div style={{ display: "flex", gap: 16, alignItems: "center", background: "rgba(0,181,102,0.06)", padding: "16px", borderRadius: "var(--radius-md)" }}>
+                <div style={{ width: 64, height: 64, borderRadius: "var(--radius-md)", background: "white", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 36, flexShrink: 0, border: "1px solid var(--profile-divider)" }}>
+                  {careGuidePlant.img || (careGuidePlant.image_url || careGuidePlant.photo_url ? <img src={careGuidePlant.image_url || careGuidePlant.photo_url} alt={guide.plantName} style={{ width: "100%", height: "100%", borderRadius: "var(--radius-md)", objectFit: "cover" }} /> : "🪴")}
+                </div>
+                <div>
+                  <h3 style={{ fontSize: 18, fontWeight: 700, color: "var(--profile-heading)", margin: "0 0 2px" }}>{guide.plantName}</h3>
+                  <p style={{ fontSize: 13, fontStyle: "italic", color: "var(--profile-meta)", margin: "0 0 8px" }}>{guide.scientificName}</p>
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    <span style={{ fontSize: 11, fontWeight: 600, padding: "2px 8px", borderRadius: 12, background: "white", border: "1px solid var(--profile-divider)", color: "var(--profile-heading)" }}>🏷️ {guide.category}</span>
+                    <span style={{ fontSize: 11, fontWeight: 600, padding: "2px 8px", borderRadius: 12, background: "rgba(0,181,102,0.15)", color: "#00b566" }}>⭐ {guide.difficulty} Care</span>
+                    <span style={{ fontSize: 11, fontWeight: 600, padding: "2px 8px", borderRadius: 12, background: guide.petSafety?.safe ? "rgba(0,181,102,0.15)" : "rgba(220,38,38,0.1)", color: guide.petSafety?.safe ? "#00b566" : "#dc2626" }}>
+                      {guide.petSafety?.safe ? "🐾 Pet Friendly" : "⚠️ Toxic to Pets"}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Core Care Parameters Grid */}
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+                {/* Watering */}
+                <div style={{ background: "white", padding: 14, borderRadius: "var(--radius-md)", border: "1px solid var(--profile-divider)" }}>
+                  <h4 style={{ fontSize: 14, fontWeight: 700, color: "var(--profile-heading)", margin: "0 0 6px", display: "flex", alignItems: "center", gap: 6 }}>💧 Watering</h4>
+                  <p style={{ fontSize: 13, fontWeight: 600, color: "#2563eb", margin: "0 0 4px" }}>{guide.water.frequency}</p>
+                  <p style={{ fontSize: 12, color: "var(--profile-meta)", margin: 0, lineHeight: 1.4 }}>{guide.water.instructions}</p>
+                </div>
+
+                {/* Sunlight */}
+                <div style={{ background: "white", padding: 14, borderRadius: "var(--radius-md)", border: "1px solid var(--profile-divider)" }}>
+                  <h4 style={{ fontSize: 14, fontWeight: 700, color: "var(--profile-heading)", margin: "0 0 6px", display: "flex", alignItems: "center", gap: 6 }}>☀️ Sunlight</h4>
+                  <p style={{ fontSize: 13, fontWeight: 600, color: "#d97706", margin: "0 0 4px" }}>{guide.light.type}</p>
+                  <p style={{ fontSize: 12, color: "var(--profile-meta)", margin: 0, lineHeight: 1.4 }}>{guide.light.description}</p>
+                </div>
+
+                {/* Temperature & Humidity */}
+                <div style={{ background: "white", padding: 14, borderRadius: "var(--radius-md)", border: "1px solid var(--profile-divider)" }}>
+                  <h4 style={{ fontSize: 14, fontWeight: 700, color: "var(--profile-heading)", margin: "0 0 6px", display: "flex", alignItems: "center", gap: 6 }}>🌡️ Temp & Humidity</h4>
+                  <p style={{ fontSize: 13, fontWeight: 600, color: "var(--profile-heading)", margin: "0 0 4px" }}>{guide.temperature.range}</p>
+                  <p style={{ fontSize: 12, color: "var(--profile-meta)", margin: 0, lineHeight: 1.4 }}>{guide.humidity.tips}</p>
+                </div>
+
+                {/* Soil & Repotting */}
+                <div style={{ background: "white", padding: 14, borderRadius: "var(--radius-md)", border: "1px solid var(--profile-divider)" }}>
+                  <h4 style={{ fontSize: 14, fontWeight: 700, color: "var(--profile-heading)", margin: "0 0 6px", display: "flex", alignItems: "center", gap: 6 }}>🪴 Soil & Repotting</h4>
+                  <p style={{ fontSize: 12, color: "var(--profile-heading)", fontWeight: 600, margin: "0 0 4px" }}>{guide.soil.type}</p>
+                  <p style={{ fontSize: 12, color: "var(--profile-meta)", margin: 0, lineHeight: 1.4 }}>{guide.soil.repotting}</p>
+                </div>
+              </div>
+
+              {/* Feeding */}
+              <div style={{ background: "white", padding: 14, borderRadius: "var(--radius-md)", border: "1px solid var(--profile-divider)" }}>
+                <h4 style={{ fontSize: 14, fontWeight: 700, color: "var(--profile-heading)", margin: "0 0 6px", display: "flex", alignItems: "center", gap: 6 }}>🧪 Fertilizer & Feeding</h4>
+                <p style={{ fontSize: 13, fontWeight: 600, color: "#00b566", margin: "0 0 4px" }}>{guide.fertilizer.schedule}</p>
+                <p style={{ fontSize: 12, color: "var(--profile-meta)", margin: 0, lineHeight: 1.4 }}>{guide.fertilizer.recommendation}</p>
+              </div>
+
+              {/* Troubleshooting */}
+              <div style={{ background: "white", padding: 14, borderRadius: "var(--radius-md)", border: "1px solid var(--profile-divider)" }}>
+                <h4 style={{ fontSize: 14, fontWeight: 700, color: "var(--profile-heading)", margin: "0 0 10px", display: "flex", alignItems: "center", gap: 6 }}>🛠️ Troubleshooting Common Issues</h4>
+                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                  {guide.commonIssues.map((issue: any, idx: number) => (
+                    <div key={idx} style={{ background: "rgba(0,0,0,0.02)", padding: 10, borderRadius: 8, borderLeft: "3px solid #d97706" }}>
+                      <p style={{ fontSize: 13, fontWeight: 700, color: "var(--profile-heading)", margin: "0 0 2px" }}>⚠️ {issue.symptom}</p>
+                      <p style={{ fontSize: 12, color: "var(--profile-meta)", margin: "0 0 2px" }}><strong>Cause:</strong> {issue.cause}</p>
+                      <p style={{ fontSize: 12, color: "#00b566", margin: 0 }}><strong>Fix:</strong> {issue.solution}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </Modal>
+        );
+      })()}
+
+      {/* Add Note Modal */}
+      {noteModalPlant && (
+        <Modal
+          title={`📝 Add Note for ${noteModalPlant.name || noteModalPlant.nickname || noteModalPlant.plant_name || "Plant"}`}
+          onClose={() => { setNoteModalPlant(null); setNoteText(""); }}
+          maxWidth={440}
+          footer={
+            <>
+              <button type="button" className="btn-profile-outline" onClick={() => { setNoteModalPlant(null); setNoteText(""); }} style={{ flex: 1, justifyContent: "center" }}>
+                Cancel
+              </button>
+              <button type="submit" form="add-note-form" className="btn-profile-primary" style={{ flex: 1, justifyContent: "center" }}>
+                Save Note
+              </button>
+            </>
+          }
+        >
+          <form id="add-note-form" onSubmit={handleSaveNote}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+              <label style={{ fontSize: 14, fontWeight: 600, color: "var(--profile-heading)" }}>Care Note / Observation</label>
+              <textarea
+                className="profile-input"
+                rows={4}
+                placeholder="e.g. Sprouted 2 new leaves today! Repotted in fresh potting mix."
+                value={noteText}
+                onChange={(e) => setNoteText(e.target.value)}
+                required
+                style={{ width: "100%", padding: 12, fontFamily: "inherit", fontSize: 14, resize: "vertical" }}
+              />
+              <p style={{ fontSize: 11, color: "var(--profile-meta)", margin: 0 }}>
+                This note will be saved in your plant care diary.
+              </p>
+            </div>
+          </form>
+        </Modal>
+      )}
+
+      {/* View Notes Journal Modal */}
+      {viewNotesPlant && (
+        <Modal
+          title={`📖 Care Journal & Notes: ${viewNotesPlant.name || viewNotesPlant.nickname || viewNotesPlant.plant_name}`}
+          onClose={() => setViewNotesPlant(null)}
+          maxWidth={540}
+          footer={
+            <button
+              type="button"
+              className="btn-profile-primary"
+              onClick={() => {
+                setNoteModalPlant(viewNotesPlant);
+                setNoteText("");
+                setViewNotesPlant(null);
+              }}
+              style={{ flex: 1, justifyContent: "center" }}
+            >
+              + Add New Note
+            </button>
+          }
+        >
+          <div style={{ display: "flex", flexDirection: "column", gap: 12, maxHeight: "60vh", overflowY: "auto", paddingRight: 4 }}>
+            {(!viewNotesPlant.care_logs || viewNotesPlant.care_logs.length === 0) ? (
+              <div style={{ textAlign: "center", padding: 24, color: "var(--profile-meta)" }}>
+                <p style={{ fontSize: 32, margin: "0 0 8px" }}>📝</p>
+                <p style={{ fontSize: 14, fontWeight: 600, margin: "0 0 4px" }}>No care notes logged yet</p>
+                <p style={{ fontSize: 12, margin: 0 }}>Click &quot;+ Add New Note&quot; below to record your plant&apos;s progress.</p>
+              </div>
+            ) : (
+              viewNotesPlant.care_logs.map((log: any, idx: number) => (
+                <div key={log.id || idx} style={{ background: "white", padding: 12, borderRadius: "var(--radius-md)", border: "1px solid var(--profile-divider)", display: "flex", gap: 12, alignItems: "flex-start" }}>
+                  <span style={{ fontSize: 24 }}>
+                    {log.type === "watered" ? "💧" : log.type === "fertilised" ? "🧪" : log.type === "repotted" ? "🪴" : "📝"}
+                  </span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+                      <span style={{ fontSize: 13, fontWeight: 700, color: "var(--profile-heading)", textTransform: "capitalize" }}>
+                        {log.type}
+                      </span>
+                      {log.logged_at && (
+                        <span style={{ fontSize: 11, color: "var(--profile-meta)" }}>
+                          {new Date(log.logged_at).toLocaleString("en-IN", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })}
+                        </span>
+                      )}
+                    </div>
+                    <p style={{ fontSize: 13, color: "var(--profile-body)", margin: 0, whiteSpace: "pre-wrap" }}>
+                      {log.note || "Care activity logged."}
+                    </p>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </Modal>
+      )}
+
       {/* Add Plant Modal */}
       {showAddModal && (
         <Modal title="Add a Plant" onClose={() => setShowAddModal(false)} maxWidth={480}
           footer={<><button type="button" className="btn-profile-outline" onClick={() => setShowAddModal(false)} style={{ flex: 1, justifyContent: "center" }}>Cancel</button><button type="submit" form="add-plant-form" className="btn-profile-primary" style={{ flex: 1, justifyContent: "center" }}>Save Plant</button></>}>
           <form id="add-plant-form" onSubmit={handleAddPlant}>
             <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+
+              {/* Purchased Plants Dropdown */}
+              {purchasedPlantOptions.length > 0 && (
+                <div style={{ background: "rgba(0,181,102,0.04)", padding: "14px", borderRadius: "var(--radius-md, 12px)", border: "1px solid rgba(0,181,102,0.15)" }}>
+                  <label style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: 14, fontWeight: 600, color: "var(--profile-heading)", marginBottom: 8 }}>
+                    <span>🌱</span> Select from your purchased plants
+                  </label>
+                  <select
+                    className="profile-select"
+                    style={{ width: "100%", padding: "10px 12px", background: "white" }}
+                    value={selectedOrderPlantId}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setSelectedOrderPlantId(val);
+                      const selectedOpt = purchasedPlantOptions.find((opt: any) => opt.id === val);
+                      if (selectedOpt) {
+                        setNewPlant({
+                          name: selectedOpt.displayName,
+                          nickname: selectedOpt.nickname,
+                          date: selectedOpt.date,
+                          location: newPlant.location || "Living Room",
+                          imageUrl: selectedOpt.imageUrl || "",
+                          productId: selectedOpt.productId,
+                        });
+                      }
+                    }}
+                  >
+                    <option value="">-- Choose a plant you bought --</option>
+                    {purchasedPlantOptions.map((opt: any) => (
+                      <option key={opt.id} value={opt.id}>
+                        {opt.displayName} — Purchased {opt.formattedDate} (Order #{opt.orderNumber})
+                      </option>
+                    ))}
+                  </select>
+                  <p style={{ fontSize: 11, color: "var(--profile-meta)", margin: "6px 0 0" }}>
+                    Selecting a plant will automatically fill the form fields below.
+                  </p>
+                </div>
+              )}
+
               <div>
                 <label style={{ display: "block", fontSize: 15, fontWeight: 600, color: "var(--profile-heading)", marginBottom: 6 }}>Plant Name *</label>
                 <input className="profile-input" placeholder="Monstera Deliciosa" value={newPlant.name} onChange={e => setNewPlant(p => ({ ...p, name: e.target.value }))} required />
@@ -1411,7 +2040,17 @@ function PlantsSection({ onToast, plants, onAddPlant, onLogCare }: { onToast: (m
               </div>
               <div>
                 <label style={{ display: "block", fontSize: 15, fontWeight: 600, color: "var(--profile-heading)", marginBottom: 6 }}>Photo</label>
-                <button type="button" className="btn-profile-outline" style={{ width: "100%", justifyContent: "center" }}>📷 Take Photo / Upload</button>
+                {newPlant.imageUrl ? (
+                  <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "8px 12px", background: "white", borderRadius: "var(--radius-sm)", border: "1px solid var(--profile-divider)" }}>
+                    <img src={newPlant.imageUrl} alt={newPlant.name} style={{ width: 44, height: 44, borderRadius: 8, objectFit: "cover" }} />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <p style={{ fontSize: 13, fontWeight: 600, color: "var(--profile-heading)", margin: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{newPlant.name}</p>
+                      <p style={{ fontSize: 11, color: "var(--profile-meta)", margin: 0 }}>Photo loaded from purchased item</p>
+                    </div>
+                  </div>
+                ) : (
+                  <button type="button" className="btn-profile-outline" style={{ width: "100%", justifyContent: "center" }}>📷 Take Photo / Upload</button>
+                )}
               </div>
             </div>
           </form>
@@ -2503,6 +3142,7 @@ export default function ProfilePage() {
           plants={plants}
           onAddPlant={(p: any) => { addPlant(p); addToast("Plant added!", "success"); }}
           onLogCare={(plantId: number, payload: any) => { addPlantLog({ plantId, payload }); addToast("Care logged!", "success"); }}
+          orders={myOrders}
         />
       );
       case "personal-info": return (
