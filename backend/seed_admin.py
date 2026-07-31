@@ -13,6 +13,7 @@ if str(PROJECT_ROOT) not in sys.path:
 from app.database import SessionLocal
 from app.models.admin import AdminUser
 from app.utils.security import hash_password
+from app.services.garden_seed import seed_garden_services_if_empty
 
 
 def seed_or_update_admin(
@@ -22,10 +23,11 @@ def seed_or_update_admin(
     last_name: str = "User",
     role: str = "super_admin",
 ):
-    print("--- Seeding/Updating Admin User ---")
+    print("--- Seeding/Updating Admin User & Garden Services ---")
     db = SessionLocal()
 
     try:
+        seed_garden_services_if_empty(db)
         existing_admin = db.query(AdminUser).filter(AdminUser.email == email).first()
 
         if existing_admin:

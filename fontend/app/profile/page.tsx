@@ -16,6 +16,7 @@ import { useMyOrders } from "@/features/orders/hooks/useMyOrders";
 import { cancelOrderApi, returnOrderApi } from "@/features/orders/api/orders.api";
 import { useMyReviews, useSubmitReview, useEditReview, useDeleteReview } from "@/features/reviews";
 import WriteReviewModal from "@/components/WriteReviewModal";
+import { api } from "@/lib/axios";
 /* ─────────────────────────────────────────────
    DESIGN TOKENS (CSS-in-JS via style injection)
 ───────────────────────────────────────────── */
@@ -3032,12 +3033,192 @@ function SecuritySection({ onToast }: { onToast: (msg: string, t?: ToastType["ty
     </section>
   );
 }
+
+/* ─────────────────────────────────────────────
+   SECTION: MY GARDEN SERVICE BOOKINGS
+───────────────────────────────────────────── */
+function GardenServicesSection({ onToast }: { onToast: (msg: string, t?: ToastType["type"]) => void }) {
+  const [bookings, setBookings] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [activeFilter, setActiveFilter] = useState("all");
+
+  useEffect(() => {
+    fetchBookings();
+  }, []);
+
+  const fetchBookings = async () => {
+    try {
+      setLoading(true);
+      const res = await api.get("/garden-services/my-bookings");
+      setBookings(res.data || []);
+    } catch (err) {
+      console.error("Error fetching service bookings:", err);
+      onToast?.("Could not load service bookings.", "error");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const filtered = bookings.filter((b) => {
+    if (activeFilter === "active") return b.status !== "completed" && b.status !== "cancelled";
+    if (activeFilter === "completed") return b.status === "completed";
+    if (activeFilter === "cancelled") return b.status === "cancelled";
+    return true;
+  });
+
+  return (
+    <section aria-label="Service Bookings" style={{ animation: "slideUp var(--motion-normal) ease" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+        <div>
+          <h2 style={{ margin: "0 0 4px", fontSize: 20, fontWeight: 700, color: "var(--profile-heading)" }}>
+            My Service Bookings
+          </h2>
+          <p style={{ margin: 0, fontSize: 13, color: "var(--profile-meta)" }}>
+            Track and manage your urban gardening and plant care services
+          </p>
+        </div>
+        <Link
+          href="/services"
+          className="btn-profile-primary"
+          style={{ height: 38, fontSize: 13, textDecoration: "none" }}
+        >
+          + Book New Service
+        </Link>
+      </div>
+
+      {/* Filter tabs */}
+      <div className="filter-tabs" role="tablist" style={{ marginBottom: 20 }}>
+        {["all", "active", "completed", "cancelled"].map((tabKey) => (
+          <button
+            key={tabKey}
+            className={`filter-tab ${activeFilter === tabKey ? "active" : ""}`}
+            onClick={() => setActiveFilter(tabKey)}
+            style={{ textTransform: "capitalize" }}
+          >
+            {tabKey}
+          </button>
+        ))}
+      </div>
+
+      {loading ? (
+        <div style={{ padding: 40, textAlign: "center", color: "var(--profile-meta)" }}>
+          Loading service bookings...
+        </div>
+      ) : filtered.length === 0 ? (
+        <div
+          style={{
+            background: "var(--profile-card-bg)",
+            borderRadius: "var(--radius-lg)",
+            border: "1px solid var(--profile-divider)",
+            padding: 40,
+            textAlign: "center",
+          }}
+        >
+          <div style={{ fontSize: 40, marginBottom: 12 }}>🌱</div>
+          <h3 style={{ margin: "0 0 6px", fontSize: 16, fontWeight: 700, color: "var(--profile-heading)" }}>
+            No Service Bookings Found
+          </h3>
+          <p style={{ margin: "0 0 16px", fontSize: 13, color: "var(--profile-meta)" }}>
+            You don't have any {activeFilter !== "all" ? activeFilter : ""} service bookings yet.
+          </p>
+          <Link
+            href="/services"
+            className="btn-profile-primary"
+            style={{ display: "inline-flex", textDecoration: "none", height: 38, fontSize: 13 }}
+          >
+            Explore Garden Services
+          </Link>
+        </div>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+          {filtered.map((b) => (
+            <div
+              key={b.uuid}
+              style={{
+                background: "var(--profile-card-bg)",
+                borderRadius: "var(--radius-lg)",
+                border: "1px solid var(--profile-divider)",
+                padding: 20,
+                boxShadow: "var(--shadow-card)",
+              }}
+            >
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 }}>
+                <div>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: "var(--color-surface-raised)", letterSpacing: "0.05em" }}>
+                    {b.booking_number}
+                  </span>
+                  <h3 style={{ margin: "4px 0 0", fontSize: 16, fontWeight: 700, color: "var(--profile-heading)" }}>
+                    {b.service_type?.name || "Garden Service"}
+                  </h3>
+                </div>
+
+                <span
+                  style={{
+                    padding: "4px 12px",
+                    borderRadius: "var(--radius-full)",
+                    fontSize: 11,
+                    fontWeight: 700,
+                    textTransform: "capitalize",
+                    background:
+                      b.status === "completed"
+                        ? "rgba(87,171,90,0.12)"
+                        : b.status === "cancelled"
+                        ? "rgba(229,83,75,0.12)"
+                        : "rgba(0,181,102,0.12)",
+                    color:
+                      b.status === "completed"
+                        ? "#57ab5a"
+                        : b.status === "cancelled"
+                        ? "#e5534b"
+                        : "#00b566",
+                  }}
+                >
+                  {b.status.replace("_", " ")}
+                </span>
+              </div>
+
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 12, fontSize: 13, color: "var(--profile-body)", margin: "12px 0 16px" }}>
+                <div>
+                  <span style={{ fontSize: 11, color: "var(--profile-meta)", display: "block" }}>Scheduled Date & Time</span>
+                  <strong>📅 {b.scheduled_date}</strong> ({b.scheduled_time_from || "Slot"})
+                </div>
+
+                <div>
+                  <span style={{ fontSize: 11, color: "var(--profile-meta)", display: "block" }}>Location</span>
+                  📍 {b.city} ({b.pincode})
+                </div>
+
+                <div>
+                  <span style={{ fontSize: 11, color: "var(--profile-meta)", display: "block" }}>Service Charge</span>
+                  <strong style={{ color: "var(--color-surface-raised)" }}>₹{Number(b.amount).toLocaleString("en-IN")}</strong>
+                </div>
+
+                <div>
+                  <span style={{ fontSize: 11, color: "var(--profile-meta)", display: "block" }}>Assigned Gardener</span>
+                  👨‍🌾 {b.gardener ? b.gardener.name : "To be assigned"}
+                </div>
+              </div>
+
+              {b.address_full && (
+                <div style={{ background: "var(--profile-input-bg)", padding: "10px 14px", borderRadius: "var(--radius-md)", fontSize: 12, color: "var(--profile-meta)" }}>
+                  <strong>Address:</strong> {b.address_full}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
 /* ─────────────────────────────────────────────
    NAV ITEMS CONFIG
 ───────────────────────────────────────────── */
 const NAV_ITEMS = [
   { id: "overview", icon: "🏠", label: "Overview", badge: null },
   { id: "orders", icon: "📦", label: "My Orders", badge: null },
+  { id: "garden-services", icon: "🌱", label: "Service Bookings", badge: null },
   { id: "wishlist", icon: "♡", label: "Wishlist", badge: null },
   { id: "plants", icon: "🌿", label: "My Plants", badge: null },
   { id: "personal-info", icon: "👤", label: "Personal Info", badge: null },
@@ -3051,6 +3232,7 @@ const NAV_ITEMS = [
 const MOBILE_TABS = [
   { id: "overview", icon: "🏠", label: "Home" },
   { id: "orders", icon: "📦", label: "Orders" },
+  { id: "garden-services", icon: "🌱", label: "Services" },
   { id: "wishlist", icon: "♡", label: "Wishlist" },
   { id: "personal-info", icon: "👤", label: "Profile" },
 ];
@@ -3129,6 +3311,7 @@ export default function ProfilePage() {
         />
       );
       case "orders": return <OrdersSection onToast={addToast} />;
+      case "garden-services": return <GardenServicesSection onToast={addToast} />;
       case "wishlist": return (
         <WishlistSection
           onToast={addToast}

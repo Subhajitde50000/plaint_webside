@@ -285,7 +285,7 @@ export default function HomePageClient({ initialData }: HomePageClientProps) {
                         Starts from â‚¹{(s.priceStart ?? s.price_start ?? 0).toLocaleString("en-IN")}
                       </span>
                       <Link
-                        href={gardenServices.ctaLink ?? gardenServices.cta_link ?? "/admin/garden-services"}
+                        href={gardenServices.ctaLink ?? gardenServices.cta_link ?? "/services"}
                         style={{
                           padding: "6px 14px", borderRadius: 8, background: T.greenPale,
                           color: T.green, fontSize: 12, fontWeight: 700, textDecoration: "none",

@@ -128,7 +128,7 @@ const NAV_LINKS = [
   { label: "Plants",   href: "/plants/monstera", dropdown: ["Indoor Plants", "Flower Plants", "Succulents", "Balcony Decor"] },
   { label: "Products", href: "#",        dropdown: ["Seeds", "Soil & Compost", "Tools", "Fertilizer"] },
   { label: "🤖 AI Care", href: "/ai-care" },
-  { label: "Our Service",    href: "#" },
+  { label: "Our Service",    href: "/services" },
 ];
 
 interface SharedNavbarProps {

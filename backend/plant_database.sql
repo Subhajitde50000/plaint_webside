@@ -979,6 +979,21 @@ CREATE TABLE IF NOT EXISTS gardeners (
     updated_at      DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB;
 
+-- Initial Seed Data for Garden Service Types
+INSERT IGNORE INTO garden_service_types (id, name, slug, description, duration_hours, base_price, image_url, is_active, sort_order) VALUES
+(1, 'Balcony & Terrace Garden Setup', 'balcony-terrace-setup', 'Complete design, plant selection, pot placement, and drip layout for outdoor balcony & terrace spaces.', 4.0, 4999.00, 'https://images.unsplash.com/photo-1585320806297-9794b3e4eeae?auto=format&fit=crop&w=800&q=80', TRUE, 1),
+(2, 'Lawn Maintenance & Care', 'lawn-maintenance', 'Professional lawn mowing, weed control, aeration, edging, and seasonal fertilization service.', 2.0, 1999.00, 'https://images.unsplash.com/photo-1558904541-efa843a96f01?auto=format&fit=crop&w=800&q=80', TRUE, 2),
+(3, 'Indoor Plant Styling & Setup', 'indoor-plant-styling', 'Aesthetic plant arrangement, decorative pot selection, and light assessment for home or office spaces.', 2.5, 2499.00, 'https://images.unsplash.com/photo-1545241047-6083a3684587?auto=format&fit=crop&w=800&q=80', TRUE, 3),
+(4, 'Vertical Garden Installation', 'vertical-garden', 'Custom living green wall installation with automated drip irrigation and foliage arrangement.', 6.0, 7999.00, 'https://images.unsplash.com/photo-1534710961216-b5c8d4529031?auto=format&fit=crop&w=800&q=80', TRUE, 4),
+(5, 'Pest & Disease Treatment', 'pest-treatment', 'Organic pest treatment, fungal spray, root health assessment, and plant revitalization treatment.', 1.5, 1299.00, 'https://images.unsplash.com/photo-1416879595882-3373a0480b5b?auto=format&fit=crop&w=800&q=80', TRUE, 5),
+(6, 'Seasonal Plant Repotting', 'seasonal-repotting', 'Root pruning, nutrient-rich soil mix upgrade, fresh container fitting, and post-potting care.', 1.0, 999.00, 'https://images.unsplash.com/photo-1463936575829-25148e1db1b8?auto=format&fit=crop&w=800&q=80', TRUE, 6);
+
+-- Initial Seed Data for Gardeners
+INSERT IGNORE INTO gardeners (id, name, phone, email, city, state, specialisations, rating_average, rating_count, is_active, joined_at) VALUES
+(1, 'Ramesh Sharma', '+91 9876543210', 'ramesh.gardener@plantcare.com', 'Mumbai', 'Maharashtra', '1,2,6', 4.85, 42, TRUE, '2024-01-15'),
+(2, 'Suresh Verma', '+91 9876543211', 'suresh.gardener@plantcare.com', 'Delhi', 'Delhi', '3,4,5', 4.90, 38, TRUE, '2024-02-10'),
+(3, 'Vikram Singh', '+91 9876543212', 'vikram.gardener@plantcare.com', 'Bangalore', 'Karnataka', '1,3,4', 4.78, 29, TRUE, '2024-03-01');
+
 -- ─────────────────────────────────────────────────────────────────────
 -- AI Care
 -- ─────────────────────────────────────────────────────────────────────
