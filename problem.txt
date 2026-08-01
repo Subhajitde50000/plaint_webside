@@ -25,3 +25,6 @@ product can be deleted
 ......................customar................
 15. admin cad see the the user card and wish list
 
+........................ ui proble................
+16. search page 
+17. user profile nab bar not ful see on phone

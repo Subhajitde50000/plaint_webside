@@ -204,28 +204,42 @@ async def get_my_plants(db: Session = Depends(get_db), user: User = Depends(get_
     res = []
     for plant in plants:
         p_dict = {
-            "id": plant.id,
-            "user_id": plant.user_id,
-            "product_id": plant.product_id,
-            "plant_name": plant.plant_name,
-            "nickname": plant.nickname,
-            "location": plant.location,
-            "photo_url": plant.photo_url,
-            "image_url": plant.photo_url,
-            "added_at": plant.added_at,
-            "last_watered_at": plant.last_watered_at,
-            "next_water_due": plant.next_water_due,
+            "id":                    plant.id,
+            "user_id":               plant.user_id,
+            "product_id":            plant.product_id,
+            "plant_name":            plant.plant_name,
+            "nickname":              plant.nickname,
+            "location":              plant.location,
+            "photo_url":             plant.photo_url,
+            "image_url":             plant.photo_url,
+            "added_at":              plant.added_at,
+            "last_watered_at":       plant.last_watered_at,
+            "next_water_due":        plant.next_water_due,
             "watering_interval_days": plant.watering_interval_days,
-            "created_at": plant.created_at,
+            "last_fertilised_at":    plant.last_fertilised_at,
+            "last_repotted_at":      plant.last_repotted_at,
+            "height_cm":             str(plant.height_cm) if plant.height_cm else None,
+            "growth_stage":          plant.growth_stage.value if plant.growth_stage else None,
+            "pot_size_cm":           plant.pot_size_cm,
+            "soil_type":             plant.soil_type,
+            "sunlight_exposure":     plant.sunlight_exposure.value if plant.sunlight_exposure else None,
+            "health_status":         plant.health_status.value if plant.health_status else "healthy",
+            "is_pet_household":      plant.is_pet_household,
+            "user_notes":            plant.user_notes,
+            "created_at":            plant.created_at,
             "care_logs": [
                 {
-                    "id": log.id,
-                    "type": log.type,
-                    "note": log.note,
-                    "logged_at": log.logged_at.isoformat() if log.logged_at else None,
+                    "id":            log.id,
+                    "type":          log.type.value if hasattr(log.type, "value") else str(log.type),
+                    "source":        log.source,
+                    "care_category": log.care_category.value if log.care_category else None,
+                    "note":          log.note,
+                    "is_care_guide": log.is_care_guide,
+                    "logged_at":     log.logged_at.isoformat() if log.logged_at else None,
                 }
                 for log in (plant.care_logs or [])
-            ]
+            ],
+            "care_guide_count": len([g for g in (plant.care_guides or []) if not g.is_resolved]),
         }
         res.append(p_dict)
     return res
@@ -239,13 +253,24 @@ async def add_plant(
 ):
     pprint(f'\n\nAdding plant for user {user.id} with payload: {payload}\n\n')
     plant_data = {
-        "plant_name": payload.plant_name,
-        "nickname": payload.nickname or payload.plant_name,
-        "product_id": payload.product_id,
-        "location": payload.location or "Indoor",
-        "photo_url": payload.photo_url,
-        "added_at": payload.added_at or date.today(),
+        "plant_name":            payload.plant_name,
+        "nickname":              payload.nickname or payload.plant_name,
+        "product_id":            payload.product_id,
+        "location":              payload.location or "Indoor",
+        "photo_url":             payload.photo_url,
+        "added_at":              payload.added_at or date.today(),
         "watering_interval_days": payload.watering_interval_days or 7,
+        "last_watered_at":       payload.last_watered_at,
+        "last_fertilised_at":    payload.last_fertilised_at,
+        "last_repotted_at":      payload.last_repotted_at,
+        "height_cm":             payload.height_cm,
+        "growth_stage":          payload.growth_stage,
+        "pot_size_cm":           payload.pot_size_cm,
+        "soil_type":             payload.soil_type,
+        "sunlight_exposure":     payload.sunlight_exposure,
+        "health_status":         payload.health_status or "healthy",
+        "is_pet_household":      payload.is_pet_household,
+        "user_notes":            payload.user_notes,
     }
     plant = UserPlant(user_id=user.id, **plant_data)
     db.add(plant)
@@ -285,7 +310,13 @@ async def add_care_log(
     if not plant:
         raise HTTPException(status_code=404, detail="Plant not found.")
 
-    log = PlantCareLog(plant_id=plant_id, **payload.model_dump())
+    log = PlantCareLog(
+        plant_id=plant_id,
+        type=payload.type,
+        note=payload.note,
+        care_category=payload.care_category,
+        source="user",
+    )
     db.add(log)
 
     # Update watering date if watered
@@ -293,6 +324,16 @@ async def add_care_log(
         from datetime import timedelta
         plant.last_watered_at = date.today()
         plant.next_water_due = date.today() + timedelta(days=plant.watering_interval_days or 7)
+    elif payload.type == "fertilised":
+        plant.last_fertilised_at = date.today()
+    elif payload.type == "repotted":
+        plant.last_repotted_at = date.today()
 
     db.commit()
-    return log
+    return {
+        "id":            log.id,
+        "type":          log.type.value if hasattr(log.type, "value") else str(log.type),
+        "note":          log.note,
+        "care_category": log.care_category.value if log.care_category else None,
+        "logged_at":     log.logged_at.isoformat() if log.logged_at else None,
+    }
